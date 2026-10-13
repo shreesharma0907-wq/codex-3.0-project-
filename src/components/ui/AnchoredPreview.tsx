@@ -136,7 +136,7 @@ export function AnchoredPreview({ label, side = 'top', children, content, classN
         else setOpen(true);
       }}
     >{trigger}</span>
-    {mounted && createPortal(
+    {mounted && requested && createPortal(
       <div
         ref={panelRef}
         id={id}

@@ -15,20 +15,17 @@ type SqliteDatabase = {
 };
 type SqliteModule = { DatabaseSync: new (filename: string) => SqliteDatabase };
 
-// Node 24 exposes SQLite as a built-in module. Keeping the import behind require
-// lets the client bundle remain free of server-only database code.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url || __filename);
 const { DatabaseSync } = require('node:sqlite') as SqliteModule;
 
 const databasePath = process.env.RUNSHOW_DB_PATH || join(process.cwd(), '.data', 'runshow.sqlite');
 const globalDatabase = globalThis as typeof globalThis & { __runshowDatabase?: SqliteDatabase };
 
-function database(): SqliteDatabase {
-  if (!globalDatabase.__runshowDatabase) {
-    mkdirSync(dirname(databasePath), { recursive: true });
-    globalDatabase.__runshowDatabase = new DatabaseSync(databasePath);
-    globalDatabase.__runshowDatabase.exec('PRAGMA foreign_keys = ON;');
-    globalDatabase.__runshowDatabase.exec(`
+export function initDbSchema(instance: SqliteDatabase) {
+  instance.exec('PRAGMA foreign_keys = ON;');
+  instance.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -134,6 +131,19 @@ function database(): SqliteDatabase {
         updated_at TEXT NOT NULL,
         UNIQUE(event_id, participant_id)
       );
+      CREATE TABLE IF NOT EXISTS partners (
+        id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        tier TEXT NOT NULL CHECK (tier IN ('Platinum', 'Gold', 'Silver', 'Bronze')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('confirmed', 'pending')),
+        contact TEXT NOT NULL DEFAULT '',
+        deadline TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS partners_event_idx ON partners(event_id, status);
+
       CREATE INDEX IF NOT EXISTS idx_registrations_event_participant ON registrations(event_id, participant_id);
       CREATE TABLE IF NOT EXISTS ticket_options (
         id TEXT PRIMARY KEY,
@@ -227,7 +237,109 @@ function database(): SqliteDatabase {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS responder_profiles (
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        skills TEXT NOT NULL DEFAULT 'operations',
+        zones TEXT NOT NULL DEFAULT 'all',
+        availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'busy', 'offline')),
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS incidents (
+        id TEXT PRIMARY KEY,
+        reference_number TEXT NOT NULL UNIQUE,
+        event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        reporter_id TEXT NOT NULL REFERENCES users(id),
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        zone TEXT,
+        affected_session_id TEXT REFERENCES event_sessions(id) ON DELETE SET NULL,
+        urgency TEXT NOT NULL CHECK (urgency IN ('critical', 'high', 'medium', 'low')),
+        contact_preference TEXT,
+        priority_score INTEGER NOT NULL DEFAULT 50,
+        priority_reason TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'acknowledged', 'assigned', 'in_progress', 'waiting_external', 'resolved', 'reopened', 'closed')),
+        assigned_responder_id TEXT REFERENCES users(id),
+        assigned_at TEXT,
+        acknowledged_at TEXT,
+        resolution_notes TEXT,
+        resolved_at TEXT,
+        closed_at TEXT,
+        related_risk_id TEXT REFERENCES risks(id) ON DELETE SET NULL,
+        related_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS incidents_event_status_idx ON incidents(event_id, status);
+      CREATE INDEX IF NOT EXISTS incidents_responder_idx ON incidents(assigned_responder_id, status);
+      CREATE INDEX IF NOT EXISTS incidents_reporter_idx ON incidents(reporter_id);
+
+      CREATE TABLE IF NOT EXISTS incident_messages (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+        sender_id TEXT NOT NULL REFERENCES users(id),
+        message TEXT NOT NULL,
+        is_internal INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS incident_messages_inc_idx ON incident_messages(incident_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS incident_activities (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+        actor_id TEXT NOT NULL REFERENCES users(id),
+        action TEXT NOT NULL,
+        details TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS incident_activities_inc_idx ON incident_activities(incident_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS incident_assignments (
+        id TEXT PRIMARY KEY,
+        incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+        responder_id TEXT NOT NULL REFERENCES users(id),
+        assigned_by TEXT NOT NULL REFERENCES users(id),
+        reason TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('assigned', 'acknowledged', 'reassigned', 'released')),
+        assigned_at TEXT NOT NULL,
+        acknowledged_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS incident_assignments_inc_idx ON incident_assignments(incident_id, assigned_at);
+
+      CREATE TABLE IF NOT EXISTS in_app_notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+        incident_id TEXT REFERENCES incidents(id) ON DELETE CASCADE,
+        task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+        risk_id TEXT REFERENCES risks(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('info', 'success', 'warning', 'error')),
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS notifications_user_idx ON in_app_notifications(user_id, read, created_at);
+
+      CREATE TABLE IF NOT EXISTS task_comments (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS task_comments_task_idx ON task_comments(task_id, created_at);
     `);
+}
+
+function database(): SqliteDatabase {
+  if (!globalDatabase.__runshowDatabase) {
+    mkdirSync(dirname(databasePath), { recursive: true });
+    const instance = new DatabaseSync(databasePath);
+    initDbSchema(instance);
+    globalDatabase.__runshowDatabase = instance;
   }
   return globalDatabase.__runshowDatabase;
 }

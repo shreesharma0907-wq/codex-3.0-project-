@@ -2,16 +2,15 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/server/auth';
 import { db, id, nowIso } from '@/lib/server/db';
 import { jsonError, requireRole, validOrigin } from '@/lib/server/http';
+import { canReadEventTeam, listTeamMembers } from '@/lib/server/team-repository';
 
 type Context = { params: Promise<{ eventId: string }> };
 
 export async function GET(_request: Request, context: Context) {
   const user = await currentUser(); const denied = requireRole(user, ['organizer', 'sub_organizer']); if (denied) return denied;
   const { eventId } = await context.params;
-  const event = db().prepare('SELECT id FROM events WHERE id=? AND organizer_id=?').get(eventId, user!.id);
-  if (!event) return jsonError('Event not found.', 404, 'EVENT_NOT_FOUND');
-  const rows = db().prepare('SELECT ta.*,u.name,u.email,u.role FROM team_assignments ta JOIN users u ON u.id=ta.user_id WHERE ta.event_id=? ORDER BY u.name').all(eventId);
-  return NextResponse.json(rows);
+  if (!canReadEventTeam(db(), eventId, user!.id, user!.role)) return jsonError('Event not found.', 404, 'EVENT_NOT_FOUND');
+  return NextResponse.json(listTeamMembers(db(), eventId, nowIso()));
 }
 
 export async function POST(request: Request, context: Context) {

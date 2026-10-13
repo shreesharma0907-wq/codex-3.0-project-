@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, HeartPulse, Home, LayoutDashboard, Settings, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, HeartPulse, Home, LayoutDashboard, Settings, Users, X } from 'lucide-react';
 import { useDashboardStore } from '@/lib/dashboard-state';
 import { LogoutButton } from '@/components/auth/LogoutButton';
 import { BrandNavigation } from './BrandNavigation';
@@ -17,9 +17,11 @@ const PREFERENCE_EVENT = 'runshow:sidebar-preference';
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'incidents', label: 'Incident Desk', icon: AlertTriangle },
+  { id: 'team', label: 'Team & Responders', icon: Users },
+  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'event-health', label: 'Event Health', icon: HeartPulse },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'settings', label: 'Settings', icon: Settings },
 ] as const;
 

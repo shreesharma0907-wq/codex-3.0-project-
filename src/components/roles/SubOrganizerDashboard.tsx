@@ -10,8 +10,14 @@ import { isTaskOverdue } from '@/lib/event-utils';
 import { RoleWorkspaceFrame } from './RoleWorkspaceFrame';
 import { Card } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
+import { IncidentDesk } from '@/components/incidents/IncidentDesk';
 
-const tabs = [{ id: 'work', label: 'My Work' }, { id: 'tasks', label: 'Tasks' }, { id: 'updates', label: 'Event Updates' }];
+const tabs = [
+  { id: 'work', label: 'My Work' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'incidents', label: 'Incident Desk' },
+  { id: 'updates', label: 'Event Updates' },
+];
 const statusNames: Record<TaskStatus, string> = { pending: 'Pending', 'in-progress': 'In progress', completed: 'Completed', blocked: 'Blocked' };
 
 export function SubOrganizerDashboard() {
@@ -59,7 +65,9 @@ export function SubOrganizerDashboard() {
 
       {tab === 'tasks' && <Card padding="md"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-[var(--text-primary)]">Assigned tasks</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Status changes update the shared organizer task list.</p></div><CalendarDays className="h-5 w-5 text-[var(--action-primary)]" aria-hidden="true" /></div><div className="mt-4 space-y-3">{eventTasks.length ? eventTasks.map(task => <article key={task.id} className="rounded-md border border-[var(--border)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><h3 className="font-medium text-[var(--text-primary)]">{task.title}</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">{task.description}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)]"><span>{task.priority} priority</span><span>{task.assignee}</span><span>Due {task.deadline}</span>{isTaskOverdue(task.deadline, task.status) && <span className="font-semibold text-[var(--text-primary)]">Overdue</span>}</div></div><Select aria-label={`Change status for ${task.title}`} value={task.status} onChange={change => void changeStatus(task, change.target.value as TaskStatus)} options={Object.entries(statusNames).map(([value, label]) => ({ value, label }))} className="min-w-36" /></div></article>) : <p className="py-8 text-center text-sm text-[var(--text-secondary)]">No tasks match the selected event function.</p>}</div></Card>}
 
-      {tab === 'updates' && <Card padding="md"><h2 className="font-semibold text-[var(--text-primary)]">Event updates</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Only updates associated with this assigned event appear here.</p><div className="mt-4 space-y-3">{eventAnnouncements.length ? eventAnnouncements.map(item => <article key={item.id} className="rounded-md border border-[var(--border)] p-4"><h3 className="font-medium text-[var(--text-primary)]">{item.title}</h3><p className="mt-2 text-sm text-[var(--text-secondary)]">{item.message}</p><p className="mt-2 text-xs text-[var(--text-muted)]">{format(parseISO(item.publishedAt), 'MMM d, yyyy · h:mm a')}</p></article>) : <p className="py-8 text-center text-sm text-[var(--text-secondary)]">No event updates have been published.</p>}</div></Card>}
+      {tab === 'incidents' && <IncidentDesk />}
+
+      {tab === 'updates' && <Card padding="md"><h2 className="font-semibold text-[var(--text-primary)]">Event Updates</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Only updates associated with this assigned event appear here.</p><div className="mt-4 space-y-3">{eventAnnouncements.length ? eventAnnouncements.map(item => <article key={item.id} className="rounded-md border border-[var(--border)] p-4"><h3 className="font-medium text-[var(--text-primary)]">{item.title}</h3><p className="mt-2 text-sm text-[var(--text-secondary)]">{item.message}</p><p className="mt-2 text-xs text-[var(--text-muted)]">{format(parseISO(item.publishedAt), 'MMM d, yyyy · h:mm a')}</p></article>) : <p className="py-8 text-center text-sm text-[var(--text-secondary)]">No event updates have been published.</p>}</div></Card>}
     </>}
   </RoleWorkspaceFrame>;
 }

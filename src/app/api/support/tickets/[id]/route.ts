@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/server/auth';
 import { db, id, nowIso } from '@/lib/server/db';
-import { canAccessEvent } from '@/lib/server/event-repository';
-import { jsonError, requireRole, validOrigin } from '@/lib/server/http';
+import { jsonError, validOrigin } from '@/lib/server/http';
+import { createNotification } from '@/lib/server/incident-repository';
+import { canAccessSubOrganizerSupportTicket } from '@/lib/server/team-repository';
 
 interface ServerUser {
   id: string;
@@ -26,6 +27,7 @@ interface TicketRow {
   updated_at: string;
   resolved_at: string | null;
   reference_number: string;
+  escalated_at?: string | null;
 }
 
 type Context = { params: Promise<{ id: string }> };
@@ -45,10 +47,7 @@ export async function GET(_request: Request, context: Context) {
     return jsonError('Access denied.', 403, 'ACCESS_DENIED');
   }
   if (user.role === 'sub_organizer') {
-    const hasAccess = database.prepare(`
-      SELECT 1 FROM team_assignments ta WHERE ta.event_id = ? AND ta.user_id = ? AND ta.status = 'active'
-    `).get(ticket.event_id, user.id);
-    if (!hasAccess) return jsonError('Access denied.', 403, 'ACCESS_DENIED');
+    if (!canAccessSubOrganizerSupportTicket(database, ticket.id, user.id)) return jsonError('Access denied.', 403, 'ACCESS_DENIED');
   }
   if (user.role === 'organizer') {
     const event = database.prepare('SELECT organizer_id FROM events WHERE id = ?').get(ticket.event_id) as { organizer_id: string } | undefined;
@@ -99,7 +98,6 @@ export async function GET(_request: Request, context: Context) {
     eventName: event?.name,
     participantId: ticket.participant_id,
     participantName: participant?.name,
-    participantEmail: participant?.email,
     title: ticket.title,
     description: ticket.description,
     category: ticket.category,
@@ -110,6 +108,7 @@ export async function GET(_request: Request, context: Context) {
     createdAt: ticket.created_at,
     updatedAt: ticket.updated_at,
     resolvedAt: ticket.resolved_at,
+    escalatedAt: ticket.escalated_at || null,
     referenceNumber: ticket.reference_number,
     messages: messages.map(msg => ({
       id: msg.id,
@@ -139,16 +138,13 @@ export async function PATCH(request: Request, context: Context) {
   if (user.role === 'participant') {
     if (ticket.participant_id !== user.id) return jsonError('Access denied.', 403, 'ACCESS_DENIED');
     // Participants can only add messages, not change status
-    const body = await request.json().catch(() => null) as { message?: string } | null;
+    const body = await request.json().catch(() => null) as { message?: string; requestId?: string } | null;
     if (!body?.message) return jsonError('Message required.', 422, 'INVALID_BODY');
-    return addMessage(database, ticket, user, body.message, false);
+    return addMessage(database, ticket, user, body.message, false, body.requestId);
   }
 
   if (user.role === 'sub_organizer') {
-    const hasAccess = database.prepare(`
-      SELECT 1 FROM team_assignments ta WHERE ta.event_id = ? AND ta.user_id = ? AND ta.status = 'active'
-    `).get(ticket.event_id, user.id);
-    if (!hasAccess) return jsonError('Access denied.', 403, 'ACCESS_DENIED');
+    if (!canAccessSubOrganizerSupportTicket(database, ticket.id, user.id)) return jsonError('Access denied.', 403, 'ACCESS_DENIED');
   }
   if (user.role === 'organizer') {
     const event = database.prepare('SELECT organizer_id FROM events WHERE id = ?').get(ticket.event_id) as { organizer_id: string } | undefined;
@@ -163,9 +159,21 @@ export async function PATCH(request: Request, context: Context) {
     assigneeId?: string;
     message?: string;
     isInternal?: boolean;
+    escalate?: boolean;
+    requestId?: string;
   } | null;
 
   if (!body) return jsonError('Invalid body.', 422, 'INVALID_BODY');
+  if (typeof body.message === 'string' && body.message.trim().length > 4000) return jsonError('Messages must be under 4,000 characters.', 422, 'INVALID_MESSAGE');
+  if (body.escalate) {
+    const event = database.prepare('SELECT organizer_id FROM events WHERE id=?').get(ticket.event_id);
+    if (!event?.organizer_id) return jsonError('Event organizer could not be found.', 409, 'EVENT_OWNER_MISSING');
+    const timestamp = nowIso();
+    const escalation = database.prepare('UPDATE support_tickets SET escalated_at=?,updated_at=? WHERE id=? AND escalated_at IS NULL').run(timestamp, timestamp, ticket.id);
+    if (escalation.changes > 0) {
+      createNotification({ userId: String(event.organizer_id), eventId: ticket.event_id, type: 'warning', title: `Participant request escalated: ${ticket.reference_number}`, message: typeof body.message === 'string' && body.message.trim() ? body.message.trim() : ticket.title });
+    }
+  }
 
   const updates: string[] = [];
   const values: (string | number)[] = [];
@@ -190,8 +198,10 @@ export async function PATCH(request: Request, context: Context) {
 
   if (body.assigneeId !== undefined) {
     if (body.assigneeId) {
-      const assignee = database.prepare('SELECT id FROM users WHERE id = ?').get(body.assigneeId);
-      if (!assignee) return jsonError('Assignee not found.', 422, 'INVALID_ASSIGNEE');
+      const assignee = database.prepare(`SELECT u.id FROM users u JOIN team_assignments ta ON ta.user_id=u.id
+        WHERE u.id=? AND u.status='active' AND u.role IN ('organizer','sub_organizer') AND ta.event_id=? AND ta.status='active'`).get(body.assigneeId, ticket.event_id);
+      if (!assignee) return jsonError('Choose an active responder assigned to this event.', 422, 'INVALID_ASSIGNEE');
+      if (user.role === 'sub_organizer' && body.assigneeId !== user.id) return jsonError('Sub-organizers may only take ownership of a request themselves.', 403, 'FORBIDDEN');
     }
     updates.push('assignee_id = ?');
     values.push(body.assigneeId ?? null);
@@ -206,20 +216,25 @@ export async function PATCH(request: Request, context: Context) {
 
   if (body.message) {
     const isInternal = (user.role === 'organizer' || user.role === 'sub_organizer') && body.isInternal !== false;
-    addMessage(database, ticket, user, body.message, isInternal);
+    addMessage(database, ticket, user, body.message, isInternal, body.requestId);
   }
 
   return NextResponse.json({ success: true });
 }
 
-function addMessage(database: ReturnType<typeof db>, ticket: TicketRow, user: ServerUser, content: string, isInternal: boolean) {
+function addMessage(database: ReturnType<typeof db>, ticket: TicketRow, user: ServerUser, content: string, isInternal: boolean, requestId?: string) {
+  const requestKey = requestId && /^[a-zA-Z0-9_-]{8,100}$/.test(requestId) ? requestId : null;
   const messageId = id('msg');
   const timestamp = nowIso();
 
-  database.prepare(`
-    INSERT INTO support_messages(id, ticket_id, sender_id, sender_role, content, is_internal, created_at)
-    VALUES(?,?,?,?,?,?,?)
-  `).run(messageId, ticket.id, user.id, user.role, content, isInternal ? 1 : 0, timestamp);
+  const result = requestKey
+    ? database.prepare(`INSERT INTO support_messages(id,ticket_id,sender_id,sender_role,content,is_internal,request_key,created_at)
+        VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(ticket_id,sender_id,request_key) WHERE request_key IS NOT NULL DO NOTHING`)
+      .run(messageId, ticket.id, user.id, user.role, content, isInternal ? 1 : 0, requestKey, timestamp)
+    : database.prepare(`INSERT INTO support_messages(id,ticket_id,sender_id,sender_role,content,is_internal,created_at) VALUES(?,?,?,?,?,?,?)`)
+      .run(messageId, ticket.id, user.id, user.role, content, isInternal ? 1 : 0, timestamp);
+
+  if (!result.changes) return NextResponse.json({ success: true, duplicate: true });
 
   // Update ticket status if participant replies
   if (user.role === 'participant' && ticket.status === 'waiting_for_participant') {

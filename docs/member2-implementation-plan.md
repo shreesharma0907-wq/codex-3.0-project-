@@ -6,7 +6,7 @@
 - Styling and components: Tailwind CSS v4, dark SaaS command-centre theme, local `Button`, `Input`, `Select`, `Textarea`, `Card`, and `Badge` components.
 - State/data: Zustand persisted store in `src/lib/dashboard-state.ts`.
 - Dashboard data entry point: `event`, `tasks`, `risks`, `recommendations`, and `kpis` in the shared dashboard store.
-- Current backend seam: `src/lib/api.ts` supports demo mode by default and API mode with `NEXT_PUBLIC_USE_API=true`.
+- Current backend seam: `src/lib/api.ts` supports live API mode by default and demo mode with `NEXT_PUBLIC_USE_API=false`.
 - Existing dashboard functionality: KPI cards, registration charts, risk centre, recommendations, tasks, partner overview, notifications, and role filtering.
 
 ## Integration Approach

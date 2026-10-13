@@ -101,6 +101,16 @@ CREATE INDEX IF NOT EXISTS idx_events_visibility ON events(visibility);
 CREATE INDEX IF NOT EXISTS idx_events_lifecycle ON events(lifecycle);
 CREATE INDEX IF NOT EXISTS idx_events_start_at ON events(start_at);
 CREATE INDEX IF NOT EXISTS idx_ticket_options_event ON ticket_options(event_id);
+CREATE TABLE IF NOT EXISTS tickets (
+  id TEXT PRIMARY KEY,
+  registration_id TEXT NOT NULL UNIQUE REFERENCES registrations(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  participant_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ticket_number TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled')),
+  issued_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_participant_event ON tickets(participant_id, event_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_event ON invitations(event_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_code ON invitations(code);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);

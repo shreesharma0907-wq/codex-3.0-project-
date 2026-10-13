@@ -6,140 +6,94 @@ export interface RecommendationRule {
   generate: (event: Event, risks: Risk[], tasks: Task[]) => Omit<Recommendation, 'id'>;
 }
 
+function safeDeadline(event: Event, tasks: Task[], owner: Role): string {
+  return tasks.find(task => task.assignee === owner && task.status !== 'completed')?.deadline || event.startDate || event.date || new Date().toISOString().slice(0, 10);
+}
+
+function eventDaysRemaining(event: Event): number | null {
+  const timestamp = Date.parse(event.startDate || event.date || '');
+  return Number.isFinite(timestamp) ? Math.max(0, Math.ceil((timestamp - Date.now()) / 86_400_000)) : null;
+}
+
 export const RECOMMENDATION_RULES: RecommendationRule[] = [
   {
-    id: 'registration-shortfall',
-    condition: (event) => {
-      const percentage = event.currentRegistrations / event.targetRegistrations;
-      return percentage < 0.7 && event.daysRemaining <= 7;
-    },
+    id: 'registration-gap',
+    condition: event => event.targetRegistrations > 0 && event.currentRegistrations < event.targetRegistrations,
     generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Registration Shortfall');
-      const task = tasks.find(t => t.title.includes('waitlist'));
+      const gap = Math.max(0, event.targetRegistrations - event.currentRegistrations);
+      const days = eventDaysRemaining(event);
+      const dailyPace = Math.ceil(gap / Math.max(1, days ?? 1));
+      const pace = days === null ? 'the remaining schedule' : `${dailyPace} registration${dailyPace === 1 ? '' : 's'} per day over the next ${days} day${days === 1 ? '' : 's'}`;
+      const risk = risks.find(item => /registration/i.test(item.title));
+      const task = tasks.find(item => item.assignee === 'marketing' && item.status !== 'completed');
       return {
-        action: 'Launch targeted LinkedIn and email campaign to waitlist and past attendees',
-        reason: 'Historical data shows 12% conversion from waitlist and 8% from past-attendee emails in final week. Highest ROI channel for immediate registrations.',
-        priority: 'urgent' as const,
-        owner: 'marketing' as Role,
-        deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: '+40-60 registrations',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
+        action: `Close the ${gap.toLocaleString()}-registration gap with a measured outreach plan`,
+        reason: `${event.currentRegistrations.toLocaleString()} of ${event.targetRegistrations.toLocaleString()} registrations are recorded. The required pace is ${pace}.`,
+        priority: days !== null && days <= 7 ? 'urgent' : 'high', owner: 'marketing', deadline: safeDeadline(event, tasks, 'marketing'),
+        expectedImpact: 'Reduce the measured registration gap; outcome depends on campaign performance.', relatedRiskId: risk?.id, relatedTaskId: task?.id,
       };
     },
   },
   {
-    id: 'venue-pending',
-    condition: (event) => !event.venueConfirmed && event.daysRemaining <= 10,
+    id: 'venue-readiness',
+    condition: event => event.format !== 'virtual' && !event.venueConfirmed,
     generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Venue Confirmation Pending');
-      const task = tasks.find(t => t.title.includes('venue contract'));
+      const risk = risks.find(item => /venue|logistic/i.test(item.title));
+      const task = tasks.find(item => item.assignee === 'operations' && item.status !== 'completed');
       return {
-        action: 'Escalate venue contract to legal and send final notice to venue provider',
-        reason: 'Deposit deadline passed. Contract requires signature to secure venue. Legal escalation adds urgency.',
-        priority: 'urgent' as const,
-        owner: 'operations' as Role,
-        deadline: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: 'Secure venue, avoid relocation',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
-      };
-    },
-  },
-  {
-    id: 'unconfirmed-partners',
-    condition: (event) => event.partnerConfirmations < event.totalPartners,
-    generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Unconfirmed Partners');
-      const task = tasks.find(t => t.title.includes('partner benefit'));
-      return {
-        action: 'Direct outreach to unconfirmed partners with customized benefit summaries',
-        reason: 'Partners cite unclear ROI. Personalized summaries addressing specific goals increased confirmation rate by 35% in past events.',
-        priority: 'high' as const,
-        owner: 'partnerships' as Role,
-        deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: 'Confirm 1-2 additional partners',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
+        action: 'Confirm the venue and record the delivery checklist',
+        reason: 'The event requires a physical venue, but the current event record does not confirm one.',
+        priority: 'high', owner: 'operations', deadline: safeDeadline(event, tasks, 'operations'),
+        expectedImpact: 'Remove an unverified venue dependency from readiness reporting.', relatedRiskId: risk?.id, relatedTaskId: task?.id,
       };
     },
   },
   {
     id: 'overdue-tasks',
-    condition: (event, risks, tasks) => tasks.some(t => t.status !== 'completed' && new Date(t.deadline) < new Date()),
+    condition: (_event, _risks, tasks) => tasks.some(task => task.status !== 'completed' && Number.isFinite(Date.parse(task.deadline)) && Date.parse(task.deadline) < Date.now()),
     generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Overdue Operational Tasks');
-      const task = tasks.find(t => t.title.includes('Redistribute'));
+      const overdue = tasks.filter(task => task.status !== 'completed' && Number.isFinite(Date.parse(task.deadline)) && Date.parse(task.deadline) < Date.now());
+      const first = overdue[0];
+      const risk = risks.find(item => /overdue|critical path/i.test(item.title));
       return {
-        action: 'Reassign overdue tasks to available team members with daily check-ins',
-        reason: 'Overdue tasks block critical path. Current assignees at capacity. Redistribution with 24h check-ins reduces completion time by ~40%.',
-        priority: 'high' as const,
-        owner: 'operations' as Role,
-        deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: 'Clear critical path blockers',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
+        action: `Review ${overdue.length} overdue task${overdue.length === 1 ? '' : 's'} and update ownership`,
+        reason: `${first?.title || 'At least one task'} is past its recorded deadline. This is a measured schedule exception, not an inferred outcome.`,
+        priority: 'high', owner: first?.assignee || 'operations', deadline: first?.deadline || safeDeadline(event, tasks, 'operations'),
+        expectedImpact: 'Restore an accurate operational schedule and expose any blocker requiring escalation.', relatedRiskId: risk?.id, relatedTaskId: first?.id,
       };
     },
   },
   {
-    id: 'speaker-cancellation',
-    condition: (event, risks) => risks.some(r => r.title === 'Speaker Cancellation Risk' && r.status === 'open'),
-    generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Speaker Cancellation Risk');
-      const task = tasks.find(t => t.title.includes('backup speakers'));
+    id: 'blocked-work',
+    condition: (_event, _risks, tasks) => tasks.some(task => task.status === 'blocked'),
+    generate: (_event, risks, tasks) => {
+      const blocked = tasks.find(task => task.status === 'blocked');
+      const risk = risks.find(item => item.status === 'open' && (item.severity === 'critical' || item.severity === 'high'));
       return {
-        action: 'Confirm backup speakers and send travel booking links',
-        reason: 'Keynotes unconfirmed on travel. Backup speakers need 48h notice. Proactive booking prevents programme gaps.',
-        priority: 'medium' as const,
-        owner: 'programme' as Role,
-        deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: 'Guarantee keynote coverage',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
+        action: `Resolve the blocker on ${blocked?.title || 'blocked work'} or escalate it to the event owner`,
+        reason: 'A task is explicitly marked blocked in the shared operational data.',
+        priority: 'urgent', owner: blocked?.assignee || 'leadership', deadline: blocked?.deadline || new Date().toISOString().slice(0, 10),
+        expectedImpact: 'Unblock the recorded dependency; readiness should be re-evaluated after the task changes.', relatedRiskId: risk?.id, relatedTaskId: blocked?.id,
       };
     },
   },
   {
-    id: 'referral-program',
-    condition: (event) => event.currentRegistrations > 0 && event.daysRemaining <= 7,
+    id: 'unconfirmed-partners',
+    condition: event => event.totalPartners > event.partnerConfirmations,
     generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Registration Shortfall');
-      const task = tasks.find(t => t.title.includes('referral'));
+      const remaining = event.totalPartners - event.partnerConfirmations;
+      const risk = risks.find(item => /partner/i.test(item.title));
+      const task = tasks.find(item => item.assignee === 'partnerships' && item.status !== 'completed');
       return {
-        action: 'Activate referral program for registered attendees',
-        reason: 'Referral program generates 1.3 registrations per participant on average. Low effort, high leverage in final days.',
-        priority: 'medium' as const,
-        owner: 'marketing' as Role,
-        deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: '+20-30 registrations',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
-      };
-    },
-  },
-  {
-    id: 'catering-finalization',
-    condition: (event, risks, tasks) => tasks.some(t => t.title.includes('catering') && t.status !== 'completed'),
-    generate: (event, risks, tasks) => {
-      const risk = risks.find(r => r.title === 'Overdue Operational Tasks');
-      const task = tasks.find(t => t.title.includes('catering'));
-      return {
-        action: 'Finalize catering numbers and dietary requirements with vendor',
-        reason: 'Catering finalization overdue. Vendor needs 48h notice. Delay risks incorrect quantities and dietary omissions.',
-        priority: 'high' as const,
-        owner: 'operations' as Role,
-        deadline: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        expectedImpact: 'Accurate catering, avoid waste/shortage',
-        relatedRiskId: risk?.id,
-        relatedTaskId: task?.id,
+        action: `Follow up with ${remaining} unconfirmed partner${remaining === 1 ? '' : 's'}`,
+        reason: `${event.partnerConfirmations} of ${event.totalPartners} partner confirmations are recorded.`,
+        priority: 'high', owner: 'partnerships', deadline: safeDeadline(event, tasks, 'partnerships'),
+        expectedImpact: 'Increase confirmed partner coverage; no outcome is assumed until the record changes.', relatedRiskId: risk?.id, relatedTaskId: task?.id,
       };
     },
   },
 ];
 
 export function generateRecommendations(event: Event, risks: Risk[], tasks: Task[]): Omit<Recommendation, 'id'>[] {
-  return RECOMMENDATION_RULES
-    .filter(rule => rule.condition(event, risks, tasks))
-    .map(rule => rule.generate(event, risks, tasks));
+  return RECOMMENDATION_RULES.filter(rule => rule.condition(event, risks, tasks)).map(rule => rule.generate(event, risks, tasks));
 }

@@ -23,6 +23,15 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Plus } from 'lucide-react';
 
+import { IncidentDesk } from '@/components/incidents/IncidentDesk';
+import { ParticipantHelpCentre } from '@/components/participant/ParticipantHelpCentre';
+import { IncidentAnalytics } from '@/components/incidents/IncidentAnalytics';
+import { TeamDirectory } from '@/components/team/TeamDirectory';
+
+// Views that are only appropriate for participant context and should never be
+// the default landing view for the organizer dashboard.
+const PARTICIPANT_ONLY_VIEWS = new Set(['help-centre']);
+
 const VIEW_COMPONENTS = {
   home: () => <HomeView onCreateEvent={() => useDashboardStore.getState().setSelectedView('setup')} />,
   setup: () => <EventSetupWizard />,
@@ -33,6 +42,9 @@ const VIEW_COMPONENTS = {
   settings: () => <SettingsView />,
   recommendations: () => <Recommendations />,
   partners: () => <PartnerOverview />,
+  incidents: () => <IncidentDesk />,
+  'help-centre': () => <ParticipantHelpCentre />,
+  team: () => <TeamDirectory />,
   operations: () => (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <RiskCentre />
@@ -53,6 +65,8 @@ function DashboardOverview() {
   return (
     <div className="space-y-6">
       <DashboardOverviewSummary />
+      {/* Incident Intelligence — real-time analytics from persisted incidents */}
+      <IncidentAnalytics />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           <RegistrationTrendChart />
@@ -72,13 +86,16 @@ function DashboardOverview() {
 const VIEW_TITLES: Record<keyof typeof VIEW_COMPONENTS, string> = {
   home: 'Home',
   setup: 'Create Event',
-  overview: 'Dashboard',
+  overview: 'Command Centre',
   calendar: 'Calendar',
   'event-health': 'Event Health',
   tasks: 'Tasks',
   settings: 'Settings',
   recommendations: 'Recommendations',
   partners: 'Partners',
+  incidents: 'Incident Desk',
+  'help-centre': 'Help Centre',
+  team: 'Team & Responders',
   operations: 'Operations',
 };
 
@@ -96,7 +113,21 @@ export function DashboardLayout() {
   const contentRef = React.useRef<HTMLElement>(null);
   const closeSidebar = React.useCallback(() => setSidebarOpen(false), []);
   const ViewComponent = VIEW_COMPONENTS[selectedView] || VIEW_COMPONENTS.overview;
-  const title = VIEW_TITLES[selectedView] ?? 'Dashboard';
+  const title = VIEW_TITLES[selectedView] ?? 'Command Centre';
+  const isUsingApi = useDashboardStore(state => state.isUsingApi);
+  const loadEventsFromApi = useDashboardStore(state => state.loadEventsFromApi);
+
+  // Guard: if the persisted selectedView is participant-only (e.g. 'help-centre'),
+  // reset to 'overview' immediately so organizers never see the participant portal.
+  React.useEffect(() => {
+    if (PARTICIPANT_ONLY_VIEWS.has(selectedView)) {
+      setSelectedView('overview');
+    }
+  }, []); // run once on mount
+
+  React.useEffect(() => {
+    if (isUsingApi) void loadEventsFromApi();
+  }, [isUsingApi, loadEventsFromApi]);
 
   React.useEffect(() => {
     const content = contentRef.current;

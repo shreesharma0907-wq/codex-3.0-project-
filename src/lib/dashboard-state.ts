@@ -47,6 +47,7 @@ interface StoreState extends DashboardState {
   simulateRegistrationIncrease: (taskId: string) => void;
   resetToDefaults: () => void;
   initializeFromApi: (eventId: string) => Promise<void>;
+  loadEventsFromApi: () => Promise<void>;
   // New actions for participant platform
   createTicketOption: (option: Omit<TicketOption, 'id' | 'soldCount'>) => void;
   updateTicketOption: (id: string, updates: Partial<TicketOption>) => void;
@@ -283,8 +284,9 @@ export const useDashboardStore = create<StoreState>()(
             isDemo: false,
             sessions: draft.sessions?.map((session, index) => ({ ...session, id: `${createdEvent.id}-session-${index + 1}` })),
           };
-          const taskIdMap = new Map(plan.tasks.map((task, index) => [task.id, `${event.id}-task-${index + 1}`]));
-          const eventTasks = plan.tasks.map((task, index) => ({ ...task, id: `${event.id}-task-${index + 1}`, eventId: event.id }));
+          const persistedTasks = get().isUsingApi && createdEvent.tasks?.length ? createdEvent.tasks : undefined;
+          const taskIdMap = new Map(plan.tasks.map((task, index) => [task.id, persistedTasks?.[index]?.id ?? `${event.id}-task-${index + 1}`]));
+          const eventTasks = (persistedTasks ?? plan.tasks.map((task, index) => ({ ...task, id: `${event.id}-task-${index + 1}` }))).map(task => ({ ...task, eventId: event.id }));
           const eventRisks = plan.risks.map((risk, index) => ({
             ...risk,
             id: `${event.id}-risk-${index + 1}`,
@@ -371,8 +373,10 @@ export const useDashboardStore = create<StoreState>()(
               notifications: [newNotification, ...get().notifications].slice(0, 10),
             });
           } catch (e) {
-            console.error('API completeTask failed, falling back to sync:', e);
-            syncCompleteTask(set, get, taskId);
+            const message = e instanceof Error ? e.message : 'Unable to complete task.';
+            console.error('API completeTask failed:', e);
+            set({ setupError: message });
+            throw e;
           }
         } else {
           syncCompleteTask(set, get, taskId);
@@ -389,12 +393,15 @@ export const useDashboardStore = create<StoreState>()(
         if (get().isUsingApi) {
           try {
             const updatedTask = await api.updateTaskStatus(taskId, status);
-            set(state => ({
-              tasks: state.tasks.map(t => t.id === taskId ? { ...updatedTask, eventId: updatedTask.eventId ?? t.eventId } : t),
-            }));
+            set(state => {
+              const tasks = state.tasks.map(t => t.id === taskId ? { ...updatedTask, eventId: updatedTask.eventId ?? t.eventId } : t);
+              return { tasks, kpis: calculateKPIs(state.event, tasks.filter(task => task.eventId === state.event.id)), setupError: null };
+            });
           } catch (e) {
-            console.error('API updateTaskStatus failed, falling back to sync:', e);
-            get().updateTaskStatusSync(taskId, status);
+            const message = e instanceof Error ? e.message : 'Unable to update task status.';
+            console.error('API updateTaskStatus failed:', e);
+            set({ setupError: message });
+            throw e;
           }
         } else {
           get().updateTaskStatusSync(taskId, status);
@@ -498,49 +505,73 @@ export const useDashboardStore = create<StoreState>()(
           const apiTasks = tasks.map(task => ({ ...task, eventId: apiEvent.id }));
           set({ event: apiEvent, events: [...get().events.filter(item => !item.isDemo && item.id !== apiEvent.id), apiEvent], selectedEventId: apiEvent.id, risks: risks.map(risk => ({ ...risk, eventId: apiEvent.id })), recommendations: recommendations.map(recommendation => ({ ...recommendation, eventId: apiEvent.id })), tasks: apiTasks, kpis: calculateKPIs(apiEvent, apiTasks), isUsingApi: true });
         } catch (e) {
-          console.error('Failed to initialize from API, using demo data:', e);
-          set({ isUsingApi: false });
+          console.error('Failed to initialize event data from the API:', e);
+          set({ setupError: e instanceof Error ? e.message : 'Unable to load event data.' });
+        }
+      },
+
+      loadEventsFromApi: async () => {
+        if (!get().isUsingApi) return;
+        try {
+          const events = await api.listEvents();
+          if (!events.length) {
+            set({ events: [], event: EMPTY_EVENT, selectedEventId: EMPTY_EVENT.id, tasks: [], risks: [], recommendations: [], kpis: calculateKPIs(EMPTY_EVENT, []) });
+            return;
+          }
+          const selectedId = events.some(item => item.id === get().selectedEventId) ? get().selectedEventId : events[0].id;
+          const selectedEvent = events.find(item => item.id === selectedId) ?? events[0];
+          const [risks, recommendations, tasks] = await Promise.all([
+            api.getRisks(selectedEvent.id),
+            api.getRecommendations(selectedEvent.id),
+            api.getTasks(selectedEvent.id),
+          ]);
+          const apiEvent = { ...selectedEvent, isDemo: false };
+          const apiTasks = tasks.map(task => ({ ...task, eventId: apiEvent.id }));
+          set({ events: events.map(item => ({ ...item, isDemo: false })), event: apiEvent, selectedEventId: apiEvent.id, risks: risks.map(risk => ({ ...risk, eventId: apiEvent.id })), recommendations: recommendations.map(item => ({ ...item, eventId: apiEvent.id })), tasks: apiTasks, kpis: calculateKPIs(apiEvent, apiTasks), isUsingApi: true, setupError: null });
+        } catch (e) {
+          console.error('Failed to load events from the API:', e);
+          set({ setupError: e instanceof Error ? e.message : 'Unable to load events.' });
         }
       },
 
       // Ticket options
-      createTicketOption: (option) => set(state => ({
+      createTicketOption: (option: Omit<TicketOption, 'id' | 'soldCount'>) => set(state => ({
         ticketOptions: [...state.ticketOptions, { ...option, id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, soldCount: 0 }]
       })),
-      updateTicketOption: (id, updates) => set(state => ({
+      updateTicketOption: (id: string, updates: Partial<TicketOption>) => set(state => ({
         ticketOptions: state.ticketOptions.map(opt => opt.id === id ? { ...opt, ...updates } : opt)
       })),
-      deleteTicketOption: (id) => set(state => ({
+      deleteTicketOption: (id: string) => set(state => ({
         ticketOptions: state.ticketOptions.filter(opt => opt.id !== id)
       })),
 
       // Invitations
-      createInvitation: (invitation) => set(state => ({
+      createInvitation: (invitation: Omit<Invitation, 'id' | 'usedCount' | 'status'>) => set(state => ({
         invitations: [...state.invitations, { ...invitation, id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, usedCount: 0, status: 'active' as InvitationStatus }]
       })),
-      revokeInvitation: (id) => set(state => ({
+      revokeInvitation: (id: string) => set(state => ({
         invitations: state.invitations.map(inv => inv.id === id ? { ...inv, status: 'revoked' as InvitationStatus, revokedAt: new Date().toISOString() } : inv)
       })),
 
       // Registrations
-      registerForEvent: (registration) => set(state => ({
+      registerForEvent: (registration: Omit<Registration, 'id' | 'referenceNumber' | 'registeredAt'>) => set(state => ({
         registrations: [...state.registrations, { ...registration, id: `reg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, referenceNumber: `REG-${Date.now().toString(36).toUpperCase()}`, registeredAt: new Date().toISOString() }]
       })),
-      cancelRegistration: (registrationId) => set(state => ({
+      cancelRegistration: (registrationId: string) => set(state => ({
         registrations: state.registrations.map(reg => reg.id === registrationId ? { ...reg, status: 'cancelled' as const, cancelledAt: new Date().toISOString() } : reg)
       })),
 
       // Support tickets
-      createSupportTicket: (ticket) => set(state => ({
+      createSupportTicket: (ticket: Omit<SupportTicket, 'id' | 'referenceNumber' | 'createdAt' | 'updatedAt'>) => set(state => ({
         supportTickets: [...state.supportTickets, { ...ticket, id: `ticket-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, referenceNumber: `SUP-${Date.now().toString(36).toUpperCase()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]
       })),
-      updateSupportTicket: (id, updates) => set(state => ({
+      updateSupportTicket: (id: string, updates: Partial<SupportTicket>) => set(state => ({
         supportTickets: state.supportTickets.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t)
       })),
-      addSupportMessage: (message) => set(state => ({
+      addSupportMessage: (message: Omit<SupportMessage, 'id' | 'createdAt'>) => set(state => ({
         supportMessages: [...state.supportMessages, { ...message, id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, createdAt: new Date().toISOString() }]
       })),
-      assignSupportTicket: (ticketId, assigneeId) => set(state => ({
+      assignSupportTicket: (ticketId: string, assigneeId: string) => set(state => ({
         supportTickets: state.supportTickets.map(t => t.id === ticketId ? { ...t, assigneeId, status: 'acknowledged' as SupportTicketStatus, updatedAt: new Date().toISOString() } : t)
       })),
     }),

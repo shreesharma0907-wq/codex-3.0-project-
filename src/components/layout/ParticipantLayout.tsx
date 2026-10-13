@@ -15,6 +15,7 @@ const VIEW_COMPONENTS = {
   announcements: () => <ParticipantAnnouncementsView />,
   join: () => <JoinInvitationView />,
   support: () => <SupportCentreView />,
+  'help-centre': () => <ParticipantHelpCentre />,
   profile: () => <ParticipantProfileView />,
   settings: () => <ParticipantSettingsView />,
   eventDetails: () => <EventDetailsPage />,
@@ -30,16 +31,11 @@ const VIEW_TITLES: Record<ParticipantView, string> = {
   announcements: 'Announcements',
   join: 'Join with Invitation',
   support: 'Help & Support',
+  'help-centre': 'Incident Desk',
   profile: 'Profile',
   settings: 'Settings',
   eventDetails: 'Event Details',
 };
-
-function ParticipantSidebarHost() {
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
-  const closeSidebar = React.useCallback(() => setSidebarOpen(false), []);
-  return <ParticipantSidebar isOpen={sidebarOpen} onClose={closeSidebar} />;
-}
 
 export function ParticipantLayout() {
   const session = useDemoSession();
@@ -87,13 +83,22 @@ export function ParticipantLayout() {
 
   return (
     <div ref={shellRef} data-heading-compact="false" className="flex h-dvh min-h-0 w-full overflow-hidden bg-[var(--page-bg)] text-[var(--text-primary)]">
-      <ParticipantSidebarHost />
+      <ParticipantSidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="border-b border-[var(--divider)] bg-[var(--surface-card)]">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--action-primary-fill)] text-[var(--action-primary-foreground)]"><RadioTower className="h-5 w-5" aria-hidden="true" /></span>
+              <button
+                type="button"
+                id="participant-nav-trigger"
+                onClick={() => setSidebarOpen(true)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--focus)] md:hidden"
+                aria-label="Open navigation menu"
+              >
+                <RadioTower className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <span className="hidden md:flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--action-primary-fill)] text-[var(--action-primary-foreground)]"><RadioTower className="h-5 w-5" aria-hidden="true" /></span>
               <div className="min-w-0">
                 <p className="text-sm font-bold">RUNSHOW</p>
                 <p className="truncate text-xs text-[var(--text-secondary)]">{title} · {session?.name}</p>
@@ -129,6 +134,7 @@ import { ParticipantVenueView } from './participant/ParticipantVenueView';
 import { ParticipantAnnouncementsView } from './participant/ParticipantAnnouncementsView';
 import { JoinInvitationView } from './participant/JoinInvitationView';
 import { SupportCentreView } from './participant/SupportCentreView';
+import { ParticipantHelpCentre } from '@/components/participant/ParticipantHelpCentre';
 import { ParticipantProfileView } from './participant/ParticipantProfileView';
 import { ParticipantSettingsView } from './participant/ParticipantSettingsView';
 import { EventDetailsPage } from './participant/EventDetailsPage';

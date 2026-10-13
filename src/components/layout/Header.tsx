@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, Bell, ChevronDown, LogOut, Menu, Plus, UserRound } from 'lucide-react';
@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button';
 import { ThemeToggle } from './ThemeToggle';
 import { useDismissableLayer } from '@/components/ui/useDismissableLayer';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { api } from '@/lib/api';
+import type { InAppNotification } from '@/lib/types';
 
 interface HeaderProps {
   title: string;
@@ -35,6 +37,35 @@ export function Header({ title, onCreateEvent, onBackToDashboard, onOpenSidebar,
   const closeUserMenu = useCallback(() => setUserMenuOpen(false), []);
   useDismissableLayer(notificationsOpen, closeNotifications, notificationsRef);
   useDismissableLayer(userMenuOpen, closeUserMenu, userMenuRef);
+
+  // Poll in-app notifications from backend API
+  useEffect(() => {
+    let active = true;
+    const fetchNotifs = async () => {
+      try {
+        const res = await api.getInAppNotifications();
+        if (active && res.notifications.length > 0) {
+          useDashboardStore.setState({
+            notifications: res.notifications.map((n: InAppNotification) => ({
+              id: n.id,
+              message: `${n.title}: ${n.message}`,
+              type: n.type,
+              timestamp: n.createdAt,
+              read: n.read,
+            })),
+          });
+        }
+      } catch {
+        // Mock fallback remains
+      }
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 8000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
   const unreadCount = notifications.filter(notification => !notification.read).length;
   const displayName = typeof session?.name === 'string' && session.name.trim() ? session.name.trim() : 'Organizer';
   const displayEmail = typeof session?.email === 'string' && session.email.trim() ? session.email.trim() : 'Account details unavailable';

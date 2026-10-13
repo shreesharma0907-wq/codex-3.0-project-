@@ -245,7 +245,7 @@ export interface OutreachDataPoint {
 
 export interface DashboardState {
   selectedRole: Role;
-  selectedView: 'home' | 'setup' | 'overview' | 'calendar' | 'event-health' | 'settings' | 'recommendations' | 'tasks' | 'partners' | 'operations';
+  selectedView: 'home' | 'setup' | 'overview' | 'calendar' | 'event-health' | 'settings' | 'recommendations' | 'tasks' | 'partners' | 'operations' | 'incidents' | 'help-centre' | 'team';
   risks: Risk[];
   recommendations: Recommendation[];
   tasks: Task[];
@@ -327,3 +327,129 @@ export interface EventPlan {
   generatedAt: string;
   generator: 'deterministic';
 }
+
+export type IncidentCategory =
+  | 'transport'
+  | 'venue'
+  | 'registration'
+  | 'accommodation'
+  | 'food'
+  | 'safety'
+  | 'technical issue'
+  | 'accessibility'
+  | 'programme'
+  | 'other';
+
+export type IncidentUrgency = 'critical' | 'high' | 'medium' | 'low';
+
+export type IncidentStatus =
+  | 'new'
+  | 'acknowledged'
+  | 'assigned'
+  | 'in_progress'
+  | 'waiting_external'
+  | 'resolved'
+  | 'reopened'
+  | 'closed';
+
+export interface IncidentMessage {
+  id: string;
+  incidentId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: AccountRole;
+  message: string;
+  isInternal: boolean;
+  createdAt: string;
+}
+
+export interface IncidentActivity {
+  id: string;
+  incidentId: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  details: string;
+  createdAt: string;
+}
+
+export interface IncidentAssignment {
+  id: string;
+  incidentId: string;
+  responderId: string;
+  responderName: string;
+  assignedBy: string;
+  assignedByName: string;
+  reason: string;
+  status: 'assigned' | 'acknowledged' | 'reassigned' | 'released';
+  assignedAt: string;
+  acknowledgedAt?: string;
+}
+
+export interface Incident {
+  id: string;
+  referenceNumber: string;
+  eventId: string;
+  reporterId: string;
+  reporterName: string;
+  category: IncidentCategory;
+  title: string;
+  description: string;
+  zone?: string;
+  affectedSessionId?: string;
+  urgency: IncidentUrgency;
+  contactPreference?: string;
+  priorityScore: number;
+  priorityReason: string;
+  status: IncidentStatus;
+  assignedResponderId?: string;
+  assignedResponderName?: string;
+  assignedAt?: string;
+  acknowledgedAt?: string;
+  resolutionNotes?: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  relatedRiskId?: string;
+  relatedTaskId?: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: IncidentMessage[];
+  activities?: IncidentActivity[];
+  assignments?: IncidentAssignment[];
+}
+
+export interface ResponderRecommendation {
+  responderId: string;
+  name: string;
+  email: string;
+  skills: string[];
+  zones: string[];
+  availability: string;
+  activeIncidentsCount: number;
+  score: number;
+  reason: string;
+}
+
+export interface InAppNotification {
+  id: string;
+  userId: string;
+  eventId?: string;
+  incidentId?: string;
+  taskId?: string;
+  riskId?: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  userId: string;
+  userName: string;
+  content: string;
+  createdAt: string;
+}
+

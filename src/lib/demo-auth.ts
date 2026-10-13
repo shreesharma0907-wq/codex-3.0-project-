@@ -17,9 +17,12 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
 
 const SESSION_KEY = 'runshow-demo-session';
 const ACCOUNTS_KEY = 'runshow-demo-account-records';
+const USE_SERVER_AUTH = process.env.NEXT_PUBLIC_USE_API === 'true';
 const listeners = new Set<() => void>();
 let cachedSession: DemoSession | null | undefined;
 let cachedAccounts: DemoAccountRecord[] | undefined;
+let serverSession: DemoSession | null | undefined;
+let serverSessionRequest: Promise<void> | undefined;
 const EMPTY_ACCOUNTS: DemoAccountRecord[] = [];
 
 function normalizeRole(value: unknown): DemoRole | null {
@@ -63,6 +66,40 @@ function invalidateAndNotify() {
   listeners.forEach(listener => listener());
 }
 
+function notifySessionListeners() { listeners.forEach(listener => listener()); }
+
+export function isUsingServerAuth() { return USE_SERVER_AUTH; }
+
+export async function refreshServerSession() {
+  if (!USE_SERVER_AUTH || typeof window === 'undefined') return;
+  if (!serverSessionRequest) {
+    serverSessionRequest = fetch('/api/auth/session', { credentials: 'include' })
+      .then(response => response.ok ? response.json() as Promise<{ user: DemoSession | null }> : { user: null })
+      .then(payload => { serverSession = payload.user; notifySessionListeners(); })
+      .catch(() => { serverSession = null; notifySessionListeners(); })
+      .finally(() => { serverSessionRequest = undefined; });
+  }
+  await serverSessionRequest;
+}
+
+export async function authenticateServer(email: string, password: string): Promise<DemoSession | null> {
+  const response = await fetch('/api/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim().toLowerCase(), password }) });
+  if (!response.ok) return null;
+  const payload = await response.json() as { user?: DemoSession };
+  serverSession = payload.user ?? null;
+  notifySessionListeners();
+  return serverSession;
+}
+
+export async function createServerParticipant(name: string, email: string, password: string): Promise<DemoSession> {
+  const response = await fetch('/api/auth/signup', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
+  const payload = await response.json().catch(() => null) as { user?: DemoSession; error?: { message?: string } } | null;
+  if (!response.ok || !payload?.user) throw new Error(payload?.error?.message || 'Unable to create your participant account.');
+  serverSession = payload.user;
+  notifySessionListeners();
+  return payload.user;
+}
+
 function discardStoredSession() {
   try { window.localStorage.removeItem(SESSION_KEY); } catch { /* Storage may be unavailable. */ }
 }
@@ -103,13 +140,14 @@ function subscribe(listener: () => void) {
     if (event.key === SESSION_KEY || event.key === ACCOUNTS_KEY) invalidateAndNotify();
   };
   window.addEventListener('storage', handleStorage);
+  if (USE_SERVER_AUTH) void refreshServerSession();
   return () => {
     listeners.delete(listener);
     window.removeEventListener('storage', handleStorage);
   };
 }
 
-export function useDemoSession() { return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot); }
+export function useDemoSession() { return useSyncExternalStore(subscribe, () => USE_SERVER_AUTH ? (serverSession ?? null) : getSnapshot(), getServerSnapshot); }
 export function useDemoAccounts() { return useSyncExternalStore(subscribe, getAccountsSnapshot, () => EMPTY_ACCOUNTS); }
 
 function bytesToHex(bytes: Uint8Array) {
@@ -209,11 +247,21 @@ export async function authenticateDemo(email: string, password: string): Promise
 }
 
 export function saveDemoSession(session: DemoSession) {
+  if (USE_SERVER_AUTH) {
+    serverSession = session;
+    notifySessionListeners();
+    return;
+  }
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   invalidateAndNotify();
 }
 
 export function clearDemoSession() {
+  if (USE_SERVER_AUTH) {
+    serverSession = null;
+    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(notifySessionListeners);
+    return;
+  }
   discardStoredSession();
   invalidateAndNotify();
 }

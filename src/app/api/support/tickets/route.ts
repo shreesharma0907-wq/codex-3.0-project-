@@ -4,14 +4,6 @@ import { db, id, nowIso } from '@/lib/server/db';
 import { canAccessEvent } from '@/lib/server/event-repository';
 import { jsonError, requireRole, validOrigin } from '@/lib/server/http';
 
-interface ServerUser {
-  id: string;
-  name: string;
-  email: string;
-  role: 'organizer' | 'sub_organizer' | 'participant';
-  status: 'active' | 'inactive';
-}
-
 export async function GET(request: Request) {
   const user = await currentUser();
   if (!user) return jsonError('Authentication required.', 401, 'UNAUTHENTICATED');
@@ -42,6 +34,9 @@ export async function GET(request: Request) {
         WHERE ta.user_id = ? AND ta.status = 'active'
       )
     `);
+    values.push(user.id);
+  } else {
+    conditions.push('t.event_id IN (SELECT e.id FROM events e WHERE e.organizer_id=?)');
     values.push(user.id);
   }
   // Organizers see all tickets for their events (handled by eventId filter or no filter)
@@ -97,6 +92,7 @@ export async function GET(request: Request) {
     created_at: string;
     updated_at: string;
     resolved_at: string | null;
+    escalated_at: string | null;
     reference_number: string;
     event_name: string;
     participant_name: string;
@@ -110,7 +106,6 @@ export async function GET(request: Request) {
     eventName: row.event_name,
     participantId: row.participant_id,
     participantName: row.participant_name,
-    participantEmail: row.participant_email,
     title: row.title,
     description: row.description,
     category: row.category,
@@ -121,6 +116,7 @@ export async function GET(request: Request) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     resolvedAt: row.resolved_at,
+    escalatedAt: row.escalated_at,
     referenceNumber: row.reference_number,
   }));
 

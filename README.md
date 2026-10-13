@@ -1,224 +1,140 @@
-# EventPilot AI Dashboard
+# EVENTPILOT AI / RUNSHOW
+## Intelligent Event Command Centre & Operational Control Layer
 
-Intelligent Event Command Centre for the CodeX 3.0 Hackathon — Member 1's dashboard implementation.
+EventPilot AI (Runshow) transforms fragmented event briefs, registrations, partner updates, operational checklists, and participant messages into a synchronized, live operational command center.
 
+The core differentiator is **incident response and risk coordination**: from participant issue reporting at a gate to intelligent responder recommendation, assignment dispatch, real-time communication, resolution verification, and audit trail closure.
 
+---
 
-EventPilot AI is a premium, futuristic SaaS event operations command centre built for hackathon judges and real-world event organizers. This dashboard provides real-time visibility into event health, registration performance, risk management, AI-powered recommendations, and task tracking.
+## 1. Architecture & Technology Stack
 
-### Key Features
+- **Framework:** Next.js 16 App Router (Turbopack, TypeScript, React 19)
+- **Database:** Node.js native `node:sqlite` (SQLite database stored locally in `.data/runshow.sqlite`)
+- **State Management:** Zustand with client-side session hydration and API data synchronization
+- **Styling & UI:** Tailwind CSS v4, Lucide React icons, Accessible custom UI components
+- **Animations & Performance:** Motion (Framer Motion) with strict `useReducedMotion()` optimization and on-demand portal rendering
+- **Analytics:** Recharts for registration trajectory and outreach conversion metrics
 
-- **Event Health Monitoring** — Live KPIs: registrations vs target, partner confirmations, task completion, overall readiness score
-- **Registration Analytics** — Trend charts with target trajectory and projected outcomes; outreach conversion by channel
-- **Risk Centre** — Prioritized risks with severity, ownership, deadlines, and filtering
-- **AI Recommendations** — Deterministic, transparent recommendation engine based on current event state
-- **Task Management** — Role-filtered tasks with status transitions, drawer details, and completion actions that update dashboard state
-- **Role Selector** — Marketing, Partnerships, Operations, Programme, Leadership views with relevant data filtering
-- **Responsive Design** — Works on desktop and mobile with collapsible sidebar
-- **Accessibility** — Semantic HTML, ARIA labels, keyboard navigation, reduced-motion support
+---
 
-## Tech Stack
+## 2. Key Modules & Features Implemented
 
-- **Framework:** Next.js 16 (App Router, TypeScript)
-- **Styling:** Tailwind CSS v4
-- **Animations:** Motion (Framer Motion) for React
-- **Charts:** Recharts
-- **Icons:** Lucide React
-- **State:** Zustand with persistence
-- **Date Handling:** date-fns
+### A. Intelligent Incident Command Desk (`/incidents`)
+- **Triage & Priority Scoring:** Transparent algorithm computing priority (0–100) based on severity, category sensitivity (safety/transport), time-to-session proximity, and SLA thresholds.
+- **Smart Responder Dispatch:** Recommendation engine ranking sub-organizers and team members by skill match, venue zone assignment, availability, and active incident workload. Explains the exact justification to the dispatcher.
+- **Incident Lifecycle:** State machine enforcing legal transitions: `new` ➔ `acknowledged` ➔ `assigned` ➔ `in_progress` ➔ `waiting_external` ➔ `resolved` ➔ `closed`.
+- **Integrated Comms & Internal Notes:** Allows operational staff to message the reporter while keeping sensitive notes strictly hidden from participants.
+- **Immutable Audit Trail:** Logs every status transition, assignment, message, and resolution with timestamp and actor attribution.
 
-## Demo Data
+### B. Participant Help Centre (`/help-centre`)
+- **Participant-Facing Support Portal:** Direct access for attendees to report transit delays, venue location requests, technical glitches, or badging problems.
+- **Quick Assistance Buttons:** One-click presets for frequent issues (e.g. Delayed Bus at Gate 2, Missing Wi-Fi, Registration desk).
+- **Persistent Reference Tracking:** Generates unique tracking IDs (`INC-2026-XXXX`). Shows live status updates, staff resolution messages, and allows participant replies.
 
-This dashboard uses **simulated demonstration data** for the "TechSprint Delhi" event:
+### C. Unified Operational Task Engine
+- **Event-Aware Tasks:** To-do items linked directly to event sessions, risks, and incidents.
+- **Operational Urgency Sorting:** Tasks dynamically prioritized by:
+  1. Critical incident blocker tasks
+  2. Overdue tasks
+  3. Imminent milestone deadlines (< 48 hours)
+  4. Routine operational tasks
+- **Quick-Add Task Bar:** Persistent task creation directly from the list with Enter key support.
 
-| Metric | Value |
-|--------|-------|
-| Registration Target | 500 |
-| Current Registrations | 280 |
-| Registration Gap | 220 (calculated as target - current) |
-| Days Remaining | 4 |
-| Partner Confirmations | 3 of 5 |
-| Venue Confirmed | No |
+### D. Persistent In-App Notifications
+- Notification service storing alerts in SQLite for assignments, status changes, escalations, and critical incidents.
+- Polling synchronization in header with unread badge counter and "Mark all read" controls.
 
-**Important:** All chart data, risks, recommendations, and tasks are explicitly simulated for demonstration purposes. This is **not** connected to a real backend or LLM.
+### E. Calendar Performance Optimization
+- Replaced eager mounting of 35+ full date previews with on-demand portal rendering in `AnchoredPreview.tsx`.
+- Restrained transforms and respect for reduced-motion preferences.
 
-## Getting Started
+---
+
+## 3. Seeded Accounts & Demonstration Credentials
+
+Run `npm run db:seed` to reset the database to a deterministic, realistic state.
+
+| Role | Email | Password | Responsibilities |
+|------|-------|----------|------------------|
+| **Lead Organizer** | `organizer@runshow.ai` | `RunshowDemo2026!` | Overall command, incident dispatch, event setup |
+| **Sub-Organizer (Transport)** | `transport@runshow.ai` | `RunshowDemo2026!` | Gate 2, shuttle logistics, operations |
+| **Sub-Organizer (Venue)** | `venue@runshow.ai` | `RunshowDemo2026!` | Auditorium, main hall, safety |
+| **Participant** | `alex@participant.com` | `RunshowDemo2026!` | Attendee portal, Help Centre |
+
+---
+
+## 4. How to Run, Seed, Test, and Build
 
 ### Prerequisites
+- Node.js v20+ (tested on Node v24.20.0)
+- npm v10+
 
-- Node.js 20+ (tested on v24.21.0)
-- npm 10+ (tested on v11.19.0)
-
-### Installation
-
+### Database Seeding
 ```bash
-cd eventpilot-dashboard
-npm install
+npm run db:seed
 ```
 
-### Development
-
+### Running Tests
 ```bash
-npm run dev
+npm test
 ```
+Runs the automated test suite verifying database schema integrity, foreign key constraints, cascade deletions, and the incident priority scoring engine.
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Production Build
-
+### Building for Production
 ```bash
 npm run build
-npm start
 ```
 
-### Linting & Type Checking
-
+### Starting the Development Server
 ```bash
-npm run lint
-npx tsc --noEmit
+# Live SQLite/API mode (default; explicit for clarity)
+NEXT_PUBLIC_USE_API=true npm run dev
 ```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Project Structure
+The invitation and registration workflow uses the server API and `.data/runshow.sqlite`. API mode is the default when `NEXT_PUBLIC_USE_API` is unset; set `NEXT_PUBLIC_USE_API=false` only to use browser-only demo fixtures. If an existing database predates invitations or tickets, restarting the server applies the idempotent schema additions without resetting `.data/runshow.sqlite`.
 
-```
-eventpilot-dashboard/
-├── src/
-│   ├── app/
-│   │   ├── globals.css         # Global styles, Tailwind v4 theme
-│   │   ├── layout.tsx          # Root layout with fonts
-│   │   └── page.tsx            # Entry point
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── Sidebar.tsx     # Navigation + role selector
-│   │   │   └── Header.tsx      # Event info, countdown, notifications
-│   │   ├── dashboard/
-│   │   │   ├── DashboardLayout.tsx  # Main layout composition
-│   │   │   └── KPICards.tsx         # KPI cards + readiness indicator
-│   │   ├── charts/
-│   │   │   └── RegistrationChart.tsx # Registration trend + outreach conversion
-│   │   ├── risks/
-│   │   │   └── RiskCentre.tsx       # Risk list with filters
-│   │   ├── recommendations/
-│   │   │   └── Recommendations.tsx  # AI recommendation cards
-│   │   ├── tasks/
-│   │   │   ├── Tasks.tsx            # Task list with status transitions
-│   │   │   └── TaskDrawer.tsx       # Side drawer for task details
-│   │   ├── ui/
-│   │   │   ├── Button.tsx
-│   │   │   ├── Badge.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── Input.tsx
-│   │   │   └── Select.tsx
-│   │   └── ...
-│   └── lib/
-│       ├── types.ts              # TypeScript interfaces
-│       ├── demo-data.ts          # Simulated event, risks, recs, tasks
-│       ├── calculations.ts       # KPI calculations, filtering helpers
-│       ├── recommendation-rules.ts # Deterministic recommendation logic
-│       └── dashboard-state.ts    # Zustand store with actions
-├── public/
-├── package.json
-├── tsconfig.json
-└── README.md
-```
+---
 
-## Architecture Decisions
+## 5. Step-by-Step Judge Demonstration Script: The "Delayed-Bus" Incident
 
-### State Management
-All demo state lives in `src/lib/dashboard-state.ts` (Zustand store). This isolates the prototype data layer so the backend team can replace it without touching UI components.
+Follow these exact steps to demonstrate the end-to-end incident lifecycle to hackathon judges:
 
-### Recommendation Logic
-Recommendations are generated by deterministic rules in `src/lib/recommendation-rules.ts`. Each rule has a `condition` and `generate` function. This is **not** an LLM integration — it's transparent, testable logic that Member 3's intelligence engine can replace.
+1. **Step 1: Open the Command Dashboard**
+   - Log in as the Lead Organizer (`organizer@runshow.ai` / `RunshowDemo2026!`).
+   - Show the **Dashboard Overview**: 50 current registrations against the 500 target (90% gap), 3 of 5 confirmed partners, and the critical risk cards.
+   - Explain the deterministic recommendations advising marketing outreach and partner follow-up.
 
-### Calculations
-KPIs, filtering, and derived metrics are pure functions in `src/lib/calculations.ts`. No business logic in JSX.
+2. **Step 2: Inspect the Seeded Delayed Bus Incident**
+   - Click on **Incident Desk** in the sidebar.
+   - View incident **`INC-2026-BUS-DEMO`**: *"Delegate Shuttle Bus #4 Delayed at Gate 2 Checkpoint"*.
+   - Point out the **Priority Score (95/100)** and the AI/Rule engine reasoning:
+     * *Critical urgency*
+     * *Transport disruption affecting arrival*
+     * *Directly impacts Opening Ceremony starting in under 30 minutes*
 
-### Component Isolation
-Each domain (risks, recommendations, tasks, charts) has its own component folder. Components receive data via the store or props, not direct imports of demo data.
+3. **Step 3: Dispatch Recommended Responder**
+   - Click **"Find Best Responders"**.
+   - Show that **Marcus Chen (Transport & Logistics)** is ranked #1 with the highest match score.
+   - Explain why: Marcus handles Gate 2 operations, specializes in transport logistics, and has 0 active incidents.
+   - Click **"Dispatch Assignment"**. Marcus is assigned and a persistent in-app notification is logged.
 
-## Role-Based Views
+4. **Step 4: Sub-Organizer / Responder Response**
+   - Switch to Marcus Chen or observe status update.
+   - Update the status: click **"Mark In Progress"**.
+   - In Incident Comms, add an update: *"Contacted venue security; Gate 2 express lane opened for Bus #4."*
+   - Add a private internal note: *"Driver confirmed arrival at Gate 2 within 4 minutes."* (Check the "Internal-only" box).
 
-| Role | Focus |
-|------|-------|
-| **Leadership** | Full overview: all risks, all recommendations, all tasks, event readiness |
-| **Marketing** | Registration gap, outreach conversion, waitlist/referral tasks |
-| **Partnerships** | Partner confirmations, partner outreach tasks |
-| **Operations** | Venue, overdue tasks, catering, AV, check-in runbook |
-| **Programme** | Speaker confirmations, AV requirements, backup speakers |
+5. **Step 5: Resolve and Close the Incident**
+   - Click **"Resolve Incident"**.
+   - Enter resolution notes: *"All 35 delegates cleared security and seated in Auditorium Hall A for Keynote kickoff."*
+   - Click **"Confirm Resolution"**.
+   - Notice the status updates to **RESOLVED**, the linked operational task marks complete, and the audit log records the timestamp.
+   - As Lead Organizer, click **"Close Incident"**.
 
-## Integration with the Team Backend
-
-This dashboard is a **standalone frontend prototype** created before backend APIs are finalized. All data and state management are isolated in `src/lib/` for clean replacement.
-
-### Integration Points
-
-| Layer | Current Implementation | Future Replacement |
-|-------|------------------------|-------------------|
-| **Event Data** | `DEMO_EVENT` in `demo-data.ts` | `GET /api/events/:id` |
-| **Metrics/KPIs** | `calculateKPIs()` in `calculations.ts` | Computed from API response |
-| **Risks** | `DEMO_RISKS` + store actions | `GET /api/events/:id/risks` |
-| **Recommendations** | `recommendation-rules.ts` engine | `GET /api/events/:id/recommendations` (Member 3's engine) |
-| **Tasks** | `DEMO_TASKS` + store actions | `GET /api/events/:id/tasks`, `PATCH /api/tasks/:id` |
-| **Notifications** | Local Zustand store | WebSocket / SSE from backend |
-
-### Example API Shapes (Provisional)
-
-```typescript
-// Event
-interface EventResponse {
-  id: string;
-  name: string;
-  date: string;
-  targetRegistrations: number;
-  currentRegistrations: number;
-  partnerConfirmations: number;
-  totalPartners: number;
-  venueConfirmed: boolean;
-  daysRemaining: number;
-}
-
-// Risk
-interface RiskResponse {
-  id: string;
-  title: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  reason: string;
-  owner: 'marketing' | 'partnerships' | 'operations' | 'programme' | 'leadership';
-  deadline?: string;
-  status: 'open' | 'in-progress' | 'mitigated' | 'closed';
-  relatedRecommendationId?: string;
-  relatedTaskId?: string;
-}
-```
-
-**Note:** These shapes are **provisional** until the team agrees on a final contract. Do not treat them as final.
-
-### Replacing the Demo Layer
-
-1. Create API client in `src/lib/api.ts`
-2. Replace `useDashboardStore` actions with API calls
-3. Update `dashboard-state.ts` to fetch on mount and sync via SWR/React Query
-4. Keep UI components unchanged — they already consume store state
-
-## Known Limitations
-
-- **No real backend** — All data is simulated in-browser
-- **No authentication** — Role selector is a UI demo only
-- **No real-time updates** — Notifications and countdown are local
-- **Recommendation engine is deterministic** — Not an LLM; rules-based only
-- **Task completion simulates outcomes** — Registration increases are hardcoded per task for demo purposes
-- **Persistence is localStorage only** — Zustand `persist` middleware for demo continuity
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server with Turbopack |
-| `npm run build` | Production build with type checking |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npx tsc --noEmit` | TypeScript type check only |
-
-## License
-
-Proprietary — CodeX 3.0 Hackathon Project
+6. **Step 6: Participant Verification**
+   - Log in as Alex Rivera (`alex@participant.com` / `RunshowDemo2026!`) or switch to the Participant Workspace.
+   - Open the **Help Centre**.
+   - View `INC-2026-BUS-DEMO`: the participant sees the resolution summary and public messages, while the internal team note remained protected.
+   - Refresh the page to demonstrate that all changes are 100% persisted in the SQLite database.

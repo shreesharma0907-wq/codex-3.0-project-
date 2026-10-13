@@ -127,7 +127,7 @@ A typed adapter that can run in **demo mode** (default) or **API mode** via envi
 
 **Environment Variables:**
 ```bash
-NEXT_PUBLIC_USE_API=true        # Enable API mode (default: false)
+NEXT_PUBLIC_USE_API=true        # Enable API mode (default: true; set false for demo fixtures)
 NEXT_PUBLIC_API_BASE=/api       # API base path (default: /api)
 ```
 

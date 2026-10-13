@@ -12,6 +12,11 @@ import {
   RiskStatus,
   TaskStatus,
   RecommendationPriority,
+  Incident,
+  IncidentStatus,
+  IncidentMessage,
+  ResponderRecommendation,
+  InAppNotification,
 } from './types';
 import {
   DEMO_EVENT,
@@ -60,12 +65,17 @@ function mergeRecommendations(
 }
 
 export const api = {
+  async listEvents(): Promise<Event[]> {
+    if (USE_API) return fetchJson<Event[]>('/events');
+    return [];
+  },
+
   async getEvent(eventId: string): Promise<Event> {
     if (USE_API) return fetchJson<Event>(`/events/${eventId}`);
     return DEMO_EVENT;
   },
 
-  async createEvent(event: Omit<Event, 'id' | 'daysRemaining'>, tasks?: Task[]): Promise<Event> {
+  async createEvent(event: Omit<Event, 'id' | 'daysRemaining'>, tasks?: Task[]): Promise<Event & { tasks?: Task[] }> {
     if (USE_API) return fetchJson<Event>('/events', { method: 'POST', body: JSON.stringify({ ...event, tasks }) });
     const today = new Date();
     const eventDate = new Date(event.date);
@@ -144,11 +154,17 @@ export const api = {
     risks: Risk[];
     recommendations: Recommendation[];
   }> {
+    void outcome;
     if (USE_API) {
-      return fetchJson(`/tasks/${taskId}/complete`, {
-        method: 'POST',
-        body: JSON.stringify({ outcome }),
-      });
+      const task = await this.updateTaskStatus(taskId, 'completed');
+      const eventId = task.eventId;
+      if (!eventId) throw new Error('Completed task is missing its event association.');
+      const [event, risks, recommendations] = await Promise.all([
+        this.getEvent(eventId),
+        this.getRisks(eventId),
+        this.getRecommendations(eventId),
+      ]);
+      return { task, event, risks, recommendations };
     }
     const task = DEMO_TASKS.find(t => t.id === taskId);
     if (!task) throw new Error('Task not found');
@@ -200,7 +216,151 @@ export const api = {
     return event;
   },
 
+  async createTask(eventId: string, task: Partial<Task>): Promise<Task> {
+    if (USE_API) {
+      return fetchJson<Task>(`/events/${eventId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(task),
+      });
+    }
+    const newTask: Task = {
+      id: `task-${Date.now()}`,
+      title: task.title || 'New Task',
+      description: task.description || '',
+      priority: task.priority || 'medium',
+      assignee: task.assignee || 'operations',
+      deadline: task.deadline || new Date().toISOString().slice(0, 10),
+      status: task.status || 'pending',
+      eventId,
+    };
+    DEMO_TASKS.unshift(newTask);
+    return newTask;
+  },
+
+  async listIncidents(eventId: string, options?: { assignedToMe?: boolean }): Promise<Incident[]> {
+    if (USE_API) {
+      const q = options?.assignedToMe ? '?assignedToMe=true' : '';
+      return fetchJson<Incident[]>(`/events/${eventId}/incidents${q}`);
+    }
+    return [];
+  },
+
+  async getIncident(incidentId: string): Promise<Incident> {
+    if (USE_API) return fetchJson<Incident>(`/incidents/${incidentId}`);
+    throw new Error('Not implemented in mock mode');
+  },
+
+  async createIncident(eventId: string, payload: Partial<Incident>): Promise<Incident> {
+    if (USE_API) {
+      return fetchJson<Incident>(`/events/${eventId}/incidents`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+    throw new Error('Not implemented in mock mode');
+  },
+
+  async updateIncidentStatus(incidentId: string, status: IncidentStatus, resolutionNotes?: string): Promise<Incident> {
+    if (USE_API) {
+      return fetchJson<Incident>(`/incidents/${incidentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, resolutionNotes }),
+      });
+    }
+    throw new Error('Not implemented in mock mode');
+  },
+
+  async getResponderRecommendations(incidentId: string): Promise<ResponderRecommendation[]> {
+    if (USE_API) return fetchJson<ResponderRecommendation[]>(`/incidents/${incidentId}/assign`);
+    return [];
+  },
+
+  async assignResponder(incidentId: string, responderId: string, reason: string): Promise<{ success: boolean; responderName: string }> {
+    if (USE_API) {
+      return fetchJson<{ success: boolean; responderName: string }>(`/incidents/${incidentId}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({ responderId, reason }),
+      });
+    }
+    throw new Error('Not implemented in mock mode');
+  },
+
+  async getIncidentMessages(incidentId: string): Promise<IncidentMessage[]> {
+    if (USE_API) return fetchJson<IncidentMessage[]>(`/incidents/${incidentId}/messages`);
+    return [];
+  },
+
+  async postIncidentMessage(incidentId: string, message: string, isInternal = false): Promise<IncidentMessage> {
+    if (USE_API) {
+      return fetchJson<IncidentMessage>(`/incidents/${incidentId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ message, isInternal }),
+      });
+    }
+    throw new Error('Not implemented in mock mode');
+  },
+
+  async getInAppNotifications(): Promise<{ notifications: InAppNotification[]; unreadCount: number }> {
+    if (USE_API) return fetchJson<{ notifications: InAppNotification[]; unreadCount: number }>('/notifications');
+    return { notifications: [], unreadCount: 0 };
+  },
+
+  async markNotificationRead(notificationId?: string, markAll = false): Promise<void> {
+    if (USE_API) {
+      await fetchJson('/notifications', {
+        method: 'PATCH',
+        body: JSON.stringify({ notificationId, markAll }),
+      });
+    }
+  },
+
+  async listIncidentAnalytics(
+    eventId: string,
+    options?: { period?: 'hourly' | 'daily' | 'weekly'; from?: string; to?: string; page?: number; limit?: number }
+  ): Promise<import('@/app/api/events/[eventId]/incidents/analytics/route').IncidentAnalyticsResponse> {
+    if (USE_API) {
+      const params = new URLSearchParams();
+      if (options?.period) params.set('period', options.period);
+      if (options?.from) params.set('from', options.from);
+      if (options?.to) params.set('to', options.to);
+      if (options?.page) params.set('page', String(options.page));
+      if (options?.limit) params.set('limit', String(options.limit));
+      const qs = params.toString();
+      return fetchJson(`/events/${eventId}/incidents/analytics${qs ? '?' + qs : ''}`);
+    }
+    // Mock: return empty analytics structure
+    return {
+      summary: { total: 0, new: 0, acknowledged: 0, active: 0, critical: 0, high: 0, resolved: 0, closed: 0, avgAckTimeMinutes: null, avgResolutionTimeMinutes: null, overdueCount: 0 },
+      timeSeries: [],
+      zoneStat: [],
+      categoryStat: [],
+      recentIncidents: [],
+      period: 'daily',
+      generatedAt: new Date().toISOString(),
+    };
+  },
+
+  async listTeamMembers(eventId: string): Promise<Array<{ id: string; name: string; email: string; role: string; responsibility: string; availability: string; skills: string; zones: string; activeIncidents: number }>> {
+    if (USE_API) return fetchJson(`/events/${eventId}/team`);
+    return [];
+  },
+
+  async createSubOrganizer(payload: {
+    name: string; email: string; password: string;
+    responsibility: string; eventId: string;
+    skills?: string; zones?: string;
+  }): Promise<{ user: { id: string; name: string; email: string }; assignment: { id: string } }> {
+    if (USE_API) {
+      return fetchJson('/team/create', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+    throw new Error('Not implemented in mock mode');
+  },
+
   isUsingApi(): boolean {
     return USE_API;
   },
 };
+

@@ -66,8 +66,8 @@ Example request:
 }
 ```
 
-The current frontend API adapter sends `credentials: include` and includes generated wizard tasks in `POST /api/events` when `NEXT_PUBLIC_USE_API=true`. The frontend still uses the browser-local demo session by default; connecting the login UI to these server auth endpoints is the next integration step and is intentionally not hidden behind a role selector.
+The current frontend API adapter sends `credentials: include` and includes generated wizard tasks in `POST /api/events` when `NEXT_PUBLIC_USE_API` is enabled. Live API/server authentication mode is the default; set `NEXT_PUBLIC_USE_API=false` to opt into browser-local demo fixtures.
 
 ## Development
 
-Node 24+ is required for the built-in `node:sqlite` module. Run `npm run dev`, configure the environment above, and set `NEXT_PUBLIC_USE_API=true` to exercise API-mode event creation. The SQL source is tracked at `database/migrations/001_initial.sql`; the current bootstrap applies an equivalent idempotent schema automatically so a migration runner is not required for local development.
+Node 24+ is required for the built-in `node:sqlite` module. Run `NEXT_PUBLIC_USE_API=true npm run dev` to exercise API-mode event creation. The SQL source is tracked at `database/migrations/001_initial.sql`; the current bootstrap applies idempotent schema additions automatically so a migration runner is not required for local development.

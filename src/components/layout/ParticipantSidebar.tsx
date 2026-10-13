@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { CalendarDays, Compass, HelpCircle, Info, Mail, MapPin, RadioTower, Settings, TicketCheck, Users, X, Zap } from 'lucide-react';
+import { CalendarDays, Compass, HelpCircle, Info, LifeBuoy, Mail, MapPin, RadioTower, Settings, TicketCheck, Users, X, Zap } from 'lucide-react';
 import { useDashboardStore } from '@/lib/dashboard-state';
 import { useDemoSession } from '@/lib/demo-auth';
 import { LogoutButton } from '@/components/auth/LogoutButton';
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { id: 'announcements', label: 'Announcements', icon: Mail },
   { id: 'join', label: 'Join with Invitation', icon: TicketCheck },
   { id: 'support', label: 'Help & Support', icon: HelpCircle },
+  { id: 'help-centre', label: 'Incident Desk', icon: LifeBuoy },
   { id: 'profile', label: 'Profile', icon: Users },
   { id: 'settings', label: 'Settings', icon: Settings },
 ] as const;

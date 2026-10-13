@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/server/auth';
 import { db, id, nowIso } from '@/lib/server/db';
 import { canAccessEvent } from '@/lib/server/event-repository';
 import { jsonError, requireRole, validOrigin } from '@/lib/server/http';
+import { issueTicket } from '@/lib/server/ticket-repository';
 
 interface EventRow {
   id: string;
@@ -72,8 +73,8 @@ export async function POST(request: Request, context: Context) {
   }
 
   // Handle invitation code if provided
-  let invitationCode = body.invitationCode;
-  let ticketOptionId = body.ticketOptionId;
+  const invitationCode = body.invitationCode;
+  const ticketOptionId = body.ticketOptionId;
 
   if (invitationCode) {
     const invitation = database.prepare('SELECT * FROM invitations WHERE code = ? AND event_id = ?').get(invitationCode, eventId) as { status: string; expires_at: string | null; max_uses: number | null; used_count: number; revoked_at: string | null } | undefined;
@@ -135,6 +136,8 @@ export async function POST(request: Request, context: Context) {
     // Update event registration count
     database.prepare('UPDATE events SET current_registrations = current_registrations + 1 WHERE id = ?').run(eventId);
 
+    if (isFree) issueTicket(registrationId, eventId, user!.id, timestamp);
+
     database.exec('COMMIT');
   } catch (error) {
     database.exec('ROLLBACK');
@@ -159,6 +162,7 @@ export async function POST(request: Request, context: Context) {
       paymentStatus: registration.payment_status,
       registeredAt: registration.created_at,
       referenceNumber: registration.reference_number,
+      ticket: isFree ? (() => { const ticket = database.prepare('SELECT ticket_number, status, issued_at FROM tickets WHERE registration_id = ?').get(registration.id) as { ticket_number: string; status: string; issued_at: string } | undefined; return ticket ? { ticketNumber: ticket.ticket_number, status: ticket.status, issuedAt: ticket.issued_at } : null; })() : null,
     },
     message: isFree ? 'Registration confirmed! You are now registered for this event.' : 'Registration created. Please complete payment to confirm your spot.',
   }, { status: 201 });

@@ -10,7 +10,16 @@ import { RoleWorkspaceFrame } from './RoleWorkspaceFrame';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
-const tabs = [{ id: 'events', label: 'My Events' }, { id: 'schedule', label: 'Schedule' }, { id: 'venue', label: 'Venue & Details' }, { id: 'announcements', label: 'Announcements' }, { id: 'profile', label: 'Profile' }];
+import { ParticipantHelpCentre } from '@/components/participant/ParticipantHelpCentre';
+
+const tabs = [
+  { id: 'events', label: 'My Events' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'help', label: 'Help Centre' },
+  { id: 'venue', label: 'Venue & Details' },
+  { id: 'announcements', label: 'Announcements' },
+  { id: 'profile', label: 'Profile' },
+];
 const eventStatusNames = { past: 'Past', active: 'In progress', upcoming: 'Upcoming', unscheduled: 'Dates pending' };
 
 export function ParticipantDashboard() {
@@ -36,6 +45,8 @@ export function ParticipantDashboard() {
       </div>}
 
       {tab === 'schedule' && <Card padding="md"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-[var(--text-primary)]">{event.name} schedule</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Published event schedule</p></div><CalendarDays className="h-5 w-5 text-[var(--action-primary)]" aria-hidden="true" /></div>{sessions.length ? <ol className="mt-5 space-y-0">{sessions.map((item, index) => <li key={item.id} className="relative grid grid-cols-[6.5rem_1fr] gap-3 pb-6 last:pb-0"><div className="text-right"><p className="text-sm font-semibold tabular-nums text-[var(--text-primary)]">{item.startTime}</p><p className="text-xs tabular-nums text-[var(--text-secondary)]">to {item.endTime}</p></div><div className="relative border-l-2 border-[var(--divider)] pl-4"><span className="absolute -left-[5px] top-1 h-2 w-2 rounded-full bg-[var(--action-primary)]"/><p className="text-sm text-[var(--text-secondary)]">{format(parseISO(item.date), 'EEEE, MMM d, yyyy')}</p><h3 className="mt-1 font-semibold text-[var(--text-primary)]">{item.name}</h3><p className="mt-1 text-sm text-[var(--text-secondary)]">{item.description}</p><p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)]"><span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{item.venue}</span>{item.functionName && <span>{item.functionName}</span>}</p></div>{index < sessions.length - 1 && <span className="absolute bottom-1 left-[6.75rem] top-0 -z-0 border-l border-dashed border-[var(--divider)]" aria-hidden="true"/>}</li>)}</ol> : <p className="mt-6 rounded-md border border-dashed border-[var(--border)] p-6 text-center text-sm text-[var(--text-secondary)]">The event schedule has not been published.</p>}</Card>}
+ 
+      {tab === 'help' && <ParticipantHelpCentre />}
 
       {tab === 'venue' && <div className="grid gap-4 md:grid-cols-2"><Card padding="md"><div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-[var(--action-primary)]" aria-hidden="true"/><div><h2 className="font-semibold text-[var(--text-primary)]">{event.format === 'virtual' ? 'Online platform' : 'Venue'}</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">{event.venue || 'Venue or platform has not been provided.'}</p><p className="mt-3"><span className={`rounded border px-2 py-1 text-xs ${event.venueConfirmed ? 'border-[var(--action-primary)]/40 bg-[var(--success-surface)] text-[var(--text-primary)]' : 'border-[var(--accent)]/50 bg-[var(--accent-muted)] text-[var(--text-primary)]'}`}>{event.venueConfirmed ? 'Confirmed' : 'Pending confirmation'}</span></p></div></div></Card><Card padding="md"><div className="flex items-start gap-3"><MonitorPlay className="mt-0.5 h-5 w-5 text-[var(--action-primary)]" aria-hidden="true"/><div><h2 className="font-semibold text-[var(--text-primary)]">Event details</h2><dl className="mt-3 space-y-3 text-sm"><div><dt className="text-[var(--text-secondary)]">Dates</dt><dd className="mt-1 text-[var(--text-primary)]">{dateRange(event.startDate || event.date, event.endDate)}</dd></div><div><dt className="text-[var(--text-secondary)]">Format</dt><dd className="mt-1 capitalize text-[var(--text-primary)]">{event.format || 'Not specified'}</dd></div><div><dt className="text-[var(--text-secondary)]">Participant instructions</dt><dd className="mt-1 text-[var(--text-primary)]">{event.participantInstructions || 'No participant instructions have been published.'}</dd></div></dl></div></div></Card></div>}
 

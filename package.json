@@ -6,9 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:inventory": "node scripts/db-inventory.mjs",
+    "supabase:import:dry-run": "node scripts/supabase-import-preflight.mjs --dry-run",
+    "db:seed": "node scripts/seed-db.js",
+    "test": "node --test test/**/*.test.js"
   },
   "dependencies": {
+    "@google/genai": "^2.28.0",
+    "@supabase/server": "^1.9.2",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.55.0",
     "motion": "^14.1.0",
