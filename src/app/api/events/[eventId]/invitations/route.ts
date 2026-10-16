@@ -54,7 +54,7 @@ function shareUrl(request: Request, path: string): string {
 
 export async function GET(_request: Request, context: Context) {
   const user = await currentUser();
-  const denied = requireRole(user, ['organizer', 'sub_organizer']);
+  const denied = requireRole(user, ['organizer']);
   if (denied) return denied;
 
   const { eventId } = await context.params;
@@ -93,7 +93,7 @@ export async function GET(_request: Request, context: Context) {
 export async function POST(request: Request, context: Context) {
   if (!validOrigin(request)) return jsonError('Invalid request origin.', 403, 'INVALID_ORIGIN');
   const user = await currentUser();
-  const denied = requireRole(user, ['organizer', 'sub_organizer']);
+  const denied = requireRole(user, ['organizer']);
   if (denied) return denied;
 
   const { eventId } = await context.params;
