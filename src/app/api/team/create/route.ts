@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     name?: unknown; email?: unknown; password?: unknown;
     responsibility?: unknown; eventId?: unknown;
     skills?: unknown; zones?: unknown; phone?: unknown; preferredContactMethod?: unknown;
+    permittedResponsibilities?: unknown;
   } | null;
 
   const name = typeof body?.name === 'string' ? body.name.trim() : '';
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
   const zones = typeof body?.zones === 'string' ? body.zones.trim() : 'all';
   const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
   const preferredContactMethod = typeof body?.preferredContactMethod === 'string' ? body.preferredContactMethod : '';
+  const permittedResponsibilities = Array.isArray(body?.permittedResponsibilities)
+    ? body.permittedResponsibilities.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean).slice(0, 20)
+    : [];
 
   // Validation
   if (!name) return jsonError('Name is required.', 422, 'MISSING_NAME');
@@ -48,6 +52,7 @@ export async function POST(request: NextRequest) {
       name, email, password, responsibility, eventId, skills, zones,
       phone: phone || null,
       preferredContactMethod: preferredContactMethod || null,
+      permittedResponsibilities,
     });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

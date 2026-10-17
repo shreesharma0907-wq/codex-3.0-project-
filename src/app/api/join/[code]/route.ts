@@ -131,7 +131,6 @@ export async function GET(_request: Request, context: Context) {
     invitation: {
       id: invitation.id,
       code: invitation.code,
-      token: invitation.token,
       eventId: invitation.event_id,
       expiresAt: invitation.expires_at,
       maxUses: invitation.max_uses,
