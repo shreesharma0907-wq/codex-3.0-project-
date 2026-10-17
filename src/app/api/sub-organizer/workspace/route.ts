@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/server/auth';
 import { db } from '@/lib/server/db';
 import { jsonError, requireRole } from '@/lib/server/http';
 import { listIncidentsForEvent } from '@/lib/server/incident-repository';
+import { listAssignedTasksForSubOrganizer, listTaskActivities } from '@/lib/server/task-repository';
 
 export async function GET() {
   const user = await currentUser();
@@ -10,26 +11,25 @@ export async function GET() {
   if (denied) return denied;
   const database = db();
   const assignments = database.prepare(`
-    SELECT ta.id,ta.event_id,ta.responsibility,ta.status,e.name AS event_name,e.start_at,e.end_at,e.venue
+    SELECT ta.id,ta.event_id,ta.responsibility,ta.status,ta.zones,e.name AS event_name,e.start_at,e.end_at,e.venue,e.lifecycle
     FROM team_assignments ta JOIN events e ON e.id=ta.event_id
     WHERE ta.user_id=? AND ta.status='active' ORDER BY e.start_at,ta.created_at
   `).all(user!.id);
   const eventIds = [...new Set(assignments.map(row => String(row.event_id)))];
   const events = eventIds.map(eventId => {
     const row = assignments.find(item => String(item.event_id) === eventId)!;
-    return { id: eventId, name: String(row.event_name), startAt: String(row.start_at), endAt: String(row.end_at), venue: row.venue ? String(row.venue) : null };
+    return { id: eventId, name: String(row.event_name), startAt: String(row.start_at), endAt: String(row.end_at), venue: row.venue ? String(row.venue) : null, status: String(row.lifecycle || 'upcoming') };
   });
-  const tasks = database.prepare(`
-    SELECT t.*,e.name AS event_name,o.name AS organizer_name
-    FROM tasks t JOIN events e ON e.id=t.event_id JOIN users o ON o.id=e.organizer_id
-    WHERE t.owner_id=? AND t.event_id IN (SELECT event_id FROM team_assignments WHERE user_id=? AND status='active')
-    ORDER BY CASE t.status WHEN 'blocked' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,t.due_at,t.created_at DESC
-  `).all(user!.id, user!.id).map(task => ({
+  const tasks = listAssignedTasksForSubOrganizer(database, user!.id).map(task => ({
     id: String(task.id), eventId: String(task.event_id), eventName: String(task.event_name), title: String(task.title),
     description: String(task.description || ''), priority: String(task.priority), status: String(task.status),
     deadline: String(task.due_at || ''), department: task.department ? String(task.department) : null,
     organizerName: String(task.organizer_name), createdAt: String(task.created_at), updatedAt: String(task.updated_at),
     comments: database.prepare('SELECT c.id,c.user_id,u.name AS user_name,c.content,c.created_at FROM task_comments c JOIN users u ON u.id=c.user_id WHERE c.task_id=? ORDER BY c.created_at DESC LIMIT 10').all(task.id),
+    activities: listTaskActivities(database, String(task.id)),
+    assignedAt: task.assigned_at ? String(task.assigned_at) : null,
+    completedAt: task.completed_at ? String(task.completed_at) : null,
+    relatedIncidentId: task.related_incident_id ? String(task.related_incident_id) : null,
   }));
   const incidents = eventIds.flatMap(eventId => listIncidentsForEvent(eventId, { responderId: user!.id }).map(incident => ({ ...incident, eventName: events.find(event => event.id === eventId)?.name || 'Event' })));
   const tickets = eventIds.length ? database.prepare(`
@@ -54,7 +54,7 @@ export async function GET() {
     .filter(item => !item.event_id || eventIds.includes(String(item.event_id))).map(item => ({ id: String(item.id), eventId: item.event_id ? String(item.event_id) : null, type: String(item.type), title: String(item.title), message: String(item.message), read: Boolean(item.read), createdAt: String(item.created_at) }));
   return NextResponse.json({
     serverNow: Date.now(),
-    user: { id: user!.id, name: user!.name, email: user!.email }, assignments: assignments.map(item => ({ id: String(item.id), eventId: String(item.event_id), responsibility: String(item.responsibility) })),
+    user: { id: user!.id, name: user!.name, email: user!.email }, assignments: assignments.map(item => ({ id: String(item.id), eventId: String(item.event_id), responsibility: String(item.responsibility), zones: item.zones ? String(item.zones) : '' })),
     events, tasks, incidents, tickets, notifications,
     profile: { skills: profile?.skills ? String(profile.skills) : '', zones: profile?.zones ? String(profile.zones) : '', availability: profile?.availability ? String(profile.availability) : 'available', phone: profile?.phone ? String(profile.phone) : null, preferredContactMethod: profile?.preferred_contact_method ? String(profile.preferred_contact_method) : null },
     capabilities,
