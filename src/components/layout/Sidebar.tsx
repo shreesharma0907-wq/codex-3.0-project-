@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { AlertTriangle, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, HeartPulse, Home, LayoutDashboard, Link2, ListTodo, Settings, Users, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckSquare, ChevronLeft, ChevronRight, HeartPulse, Home, LayoutDashboard, Link2, ListTodo, Settings, Users, UserPlus, X } from 'lucide-react';
 import { useDashboardStore } from '@/lib/dashboard-state';
 import { LogoutButton } from '@/components/auth/LogoutButton';
 import { BrandNavigation } from './BrandNavigation';
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { id: 'incidents', label: 'Incident Desk', icon: AlertTriangle },
   { id: 'invitations', label: 'Invitations', icon: Link2 },
   { id: 'team', label: 'Team & Responders', icon: Users },
+  { id: 'sub-organizers', label: 'Sub-Organizers', icon: UserPlus },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'my-todo', label: 'My To-Do', icon: ListTodo },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },

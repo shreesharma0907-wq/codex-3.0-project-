@@ -7,7 +7,6 @@ import { useDemoSession } from '@/lib/demo-auth';
 import { useDashboardStore } from '@/lib/dashboard-state';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { TeamAccess } from './TeamAccess';
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -36,8 +35,6 @@ export function SettingsView() {
       <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--surface-elevated)] text-[var(--text-secondary)]"><UserRound className="h-5 w-5" aria-hidden="true" /></span><div><h2 className="font-semibold text-[var(--text-primary)]">Account</h2><p className="text-sm text-[var(--text-secondary)]">Signed-in profile</p></div></div>
       <dl className="mt-5 grid gap-4 border-t border-[var(--divider)] pt-4 sm:grid-cols-2"><div><dt className="text-xs text-[var(--text-secondary)]">Name</dt><dd className="mt-1 text-sm font-medium text-[var(--text-primary)]">{session?.name ?? 'Organizer'}</dd></div><div><dt className="text-xs text-[var(--text-secondary)]">Email</dt><dd className="mt-1 break-all text-sm font-medium text-[var(--text-primary)]">{session?.email ?? 'Not available'}</dd></div><div><dt className="text-xs text-[var(--text-secondary)]">Role</dt><dd className="mt-1 text-sm font-medium capitalize text-[var(--text-primary)]">{session?.role ?? 'Organizer'}</dd></div><div><dt className="text-xs text-[var(--text-secondary)]">Environment</dt><dd className="mt-1 text-sm font-medium text-[var(--text-primary)]">Local prototype</dd></div></dl>
     </Card>
-
-    {session?.role === 'organizer' && <TeamAccess />}
 
     {!isUsingApi && <Card padding="md">
       <h2 className="font-semibold text-[var(--text-primary)]">Local workspace data</h2><p className="mt-1 text-sm text-[var(--text-secondary)]">Clear locally stored events, tasks, risks and recommendations. Your account session and appearance preference are kept.</p>

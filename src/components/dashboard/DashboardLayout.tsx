@@ -30,6 +30,7 @@ import { ParticipantHelpCentre } from '@/components/participant/ParticipantHelpC
 import { IncidentAnalytics } from '@/components/incidents/IncidentAnalytics';
 import { TeamDirectory } from '@/components/team/TeamDirectory';
 import { InvitationManagementView } from '@/components/invitations/InvitationManagementView';
+import { SubOrganizerManagementView } from '@/components/team/SubOrganizerManagementView';
 
 // Views that are only appropriate for participant context and should never be
 // the default landing view for the organizer dashboard.
@@ -50,6 +51,7 @@ const VIEW_COMPONENTS = {
   invitations: () => <InvitationManagementView />,
   'help-centre': () => <ParticipantHelpCentre />,
   team: () => <TeamDirectory />,
+  'sub-organizers': () => <SubOrganizerManagementView />,
   operations: () => (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <RiskCentre />
@@ -104,6 +106,7 @@ const VIEW_TITLES: Record<keyof typeof VIEW_COMPONENTS, string> = {
   invitations: 'Invitations & Access',
   'help-centre': 'Help Centre',
   team: 'Team & Responders',
+  'sub-organizers': 'Sub-Organizers',
   operations: 'Operations',
 };
 
@@ -131,7 +134,7 @@ export function DashboardLayout() {
     if (PARTICIPANT_ONLY_VIEWS.has(selectedView)) {
       setSelectedView('overview');
     }
-  }, []); // run once on mount
+  }, [selectedView, setSelectedView]);
 
   React.useEffect(() => {
     if (isUsingApi) void loadEventsFromApi();
