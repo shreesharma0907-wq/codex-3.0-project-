@@ -7,10 +7,20 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
-import { authenticateDemo, authenticateServer, createDemoParticipant, createServerParticipant, DEMO_ACCOUNTS, destinationForRole, isUsingServerAuth, saveDemoSession, useDemoSession } from '@/lib/demo-auth';
+import { authenticateDemo, authenticateServer, createDemoParticipant, createServerAccount, DEMO_ACCOUNTS, destinationForRole, isUsingServerAuth, saveDemoSession, useDemoSession } from '@/lib/demo-auth';
 import { useDashboardStore } from '@/lib/dashboard-state';
 
 type AuthView = 'signin' | 'signup';
+
+function returnPathForRole(role: 'organizer' | 'sub_organizer' | 'participant', value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return null;
+  if (role === 'sub_organizer' && value.startsWith('/join/team/')) return value;
+  if (role === 'participant' && (value === '/participant/join' || value.startsWith('/participant/join?'))) return value;
+  if (role === 'organizer' && value.startsWith('/organizer/')) return value;
+  if (role === 'sub_organizer' && value.startsWith('/sub-organizer/')) return value;
+  if (role === 'participant' && value.startsWith('/participant/')) return value;
+  return null;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +30,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selectedWorkspace, setSelectedWorkspace] = useState(DEMO_ACCOUNTS[0].role);
+  const [signupRole, setSignupRole] = useState<'organizer' | 'sub_organizer' | 'participant'>('participant');
   const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
@@ -34,9 +45,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (session) {
       if (session.role === 'organizer') useDashboardStore.getState().setSelectedView('home');
-      router.replace(destinationForRole(session.role));
+      router.replace(returnPathForRole(session.role, redirect) ?? destinationForRole(session.role));
     }
-  }, [router, session]);
+  }, [router, session, redirect]);
 
   useEffect(() => {
     if (!focusAfterViewChange.current) return;
@@ -45,6 +56,10 @@ export default function LoginPage() {
   }, [view]);
 
   const switchView = (next: AuthView) => {
+    if (next === 'signup' && typeof window !== 'undefined') {
+      const query = new URLSearchParams(window.location.search);
+      if (query.get('role') === 'sub_organizer' || query.get('redirect')?.includes('/join/team/')) setSignupRole('sub_organizer');
+    }
     if (view === 'signup' && next === 'signin') {
       setSignupPassword('');
       setConfirmPassword('');
@@ -67,7 +82,8 @@ export default function LoginPage() {
       }
       if (authenticatedSession.role === 'organizer') useDashboardStore.getState().setSelectedView('home');
       saveDemoSession(authenticatedSession);
-      router.replace(authenticatedSession.role === 'participant' && redirect?.startsWith('/') ? redirect : destinationForRole(authenticatedSession.role));
+      const safeReturn = returnPathForRole(authenticatedSession.role, redirect);
+      router.replace(safeReturn ?? destinationForRole(authenticatedSession.role));
     } catch {
       setError('Sign-in could not be completed. Please try again.');
     } finally {
@@ -78,6 +94,10 @@ export default function LoginPage() {
   const onSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupEmail.trim())) {
+      setError('Enter a valid email address.');
+      return;
+    }
     if (signupPassword.length < 8) {
       setError('Choose a password with at least 8 characters.');
       return;
@@ -89,14 +109,20 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      const createdSession = isUsingServerAuth() ? await createServerParticipant(fullName, signupEmail, signupPassword) : await createDemoParticipant(fullName, signupEmail, signupPassword);
+      const teamToken = redirect?.match(/^\/join\/team\/([^/?#]+)/)?.[1];
+      if (signupRole === 'sub_organizer' && !teamToken) throw new Error('Sub-organizer accounts can only be created from an authorized event invitation.');
+      if (!isUsingServerAuth() && signupRole !== 'participant') throw new Error('Organizer and sub-organizer registration requires server authentication. Enable API mode to continue.');
+      const createdSession = isUsingServerAuth()
+        ? await createServerAccount(fullName, signupEmail, signupPassword, signupRole, teamToken ? decodeURIComponent(teamToken) : undefined)
+        : await createDemoParticipant(fullName, signupEmail, signupPassword);
       saveDemoSession(createdSession);
       setPassword('');
       setSignupPassword('');
       setConfirmPassword('');
       setFullName('');
       focusAfterViewChange.current = true;
-      router.replace(createdSession.role === 'participant' && redirect?.startsWith('/') ? redirect : destinationForRole(createdSession.role));
+      const safeReturn = returnPathForRole(createdSession.role, redirect);
+      router.replace(safeReturn ?? destinationForRole(createdSession.role));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create your participant account.');
     } finally {
@@ -178,12 +204,15 @@ export default function LoginPage() {
                   </div>
                   <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Signing in…' : 'Login'}</Button>
                 </form>
-                <p className="mt-4 text-center text-sm text-[var(--text-secondary)]">New to RUN-SHOW? <button type="button" onClick={() => switchView('signup')} className="font-semibold text-[var(--action-primary)] underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Create a participant account</button></p>
+                <p className="mt-4 text-center text-sm text-[var(--text-secondary)]">New to RUN-SHOW? <button type="button" onClick={() => switchView('signup')} className="font-semibold text-[var(--action-primary)] underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Create an account</button></p>
               </section>
             ) : (
-              <section aria-label="Create participant account">
-                <p className="mb-4 text-sm text-[var(--text-secondary)]">Create a participant account. Organizer and sub-organizer access is managed by the organizer.</p>
+              <section aria-label="Create account">
+                <p className="mb-4 text-sm text-[var(--text-secondary)]">Create an account. Sub-organizer access is granted only through an authorized event invitation.</p>
                 <form className="space-y-4" onSubmit={onSignUp}>
+                  <fieldset className="min-w-0"><legend className="mb-2 text-sm font-medium text-[var(--text-primary)]">Account type</legend><div className="grid grid-cols-3 gap-2">
+                    {([{role:'organizer' as const,label:'Main Organizer'},{role:'sub_organizer' as const,label:'Sub-organizer'},{role:'participant' as const,label:'Participant'}]).map(option => <label key={option.role} className={`flex min-h-12 min-w-0 cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs font-medium ${signupRole===option.role?'border-[var(--action-primary)] bg-[var(--success-surface)] text-[var(--text-primary)]':'border-[var(--divider)] text-[var(--text-secondary)]'}`}><input type="radio" name="signupRole" value={option.role} checked={signupRole===option.role} onChange={()=>setSignupRole(option.role)} className="accent-[var(--action-primary)]"/><span className="break-words">{option.label}</span></label>)}
+                  </div>{signupRole==='sub_organizer' && <p className="mt-2 text-xs text-[var(--text-secondary)]">Open the organizer’s invitation link first. It will be preserved through signup.</p>}</fieldset>
                   <Input ref={signupNameRef} id="signup-name" label="Full name" autoComplete="name" required minLength={2} value={fullName} onChange={event => { setFullName(event.target.value); setError(''); }} />
                   <Input id="signup-email" label="Email" type="email" autoComplete="email" required value={signupEmail} onChange={event => { setSignupEmail(event.target.value); setError(''); }} />
                   <div className="relative">
@@ -191,7 +220,7 @@ export default function LoginPage() {
                     <button type="button" className="absolute right-2 top-[2.1rem] inline-flex h-9 w-9 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] focus:outline-none focus:ring-2 focus:ring-[var(--focus)]" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button>
                   </div>
                   <Input id="signup-confirm-password" label="Confirm password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} value={confirmPassword} onChange={event => { setConfirmPassword(event.target.value); setError(''); }} />
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : 'Create Participant Account'}</Button>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Creating account…' : `Create ${signupRole === 'organizer' ? 'Organizer' : signupRole === 'sub_organizer' ? 'Sub-organizer' : 'Participant'} Account`}</Button>
                 </form>
                 <p className="mt-4 text-center text-sm text-[var(--text-secondary)]">Already have an account? <button type="button" onClick={() => switchView('signin')} className="font-semibold text-[var(--action-primary)] underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]">Login</button></p>
               </section>
